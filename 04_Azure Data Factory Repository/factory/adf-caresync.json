@@ -1,0 +1,20 @@
+{
+	"name": "adf-caresync",
+	"properties": {
+		"globalParameters": {
+			"email_receipent": {
+				"type": "string",
+				"value": "databeli14@gmail.com"
+			},
+			"env": {
+				"type": "string",
+				"value": "DEV"
+			},
+			"logic_apps_url": {
+				"type": "string",
+				"value": "https://prod-10.centralindia.logic.azure.com:443/workflows/1619419c8f734536937d17f3ab86470e/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=hCotkzuUlGYnhi_cePhpfxV59uHGUXT_eCG_jm0cYg4"
+			}
+		}
+	},
+	"location": "centralindia"
+}
