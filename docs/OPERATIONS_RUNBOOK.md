@@ -13,7 +13,7 @@ The ADF master pipeline, `PL_MASTER`, coordinates:
 3. Metadata-driven Silver-to-Gold execution.
 4. Email notification.
 
-The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. PostgreSQL extraction now resolves both schema and table names from metadata. The ADLS CSV branch enumerates files, checks `ctrl.file_ingestion_manifest`, and copies unprocessed file versions individually. Landing folder names use a 24-hour timestamp with milliseconds and the ADF run ID to reduce collisions. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An empty FULL batch fails before Silver can overwrite its target; an empty incremental batch skips Silver writes and watermark advancement, then records a successful zero-row outcome.
+The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a timestamp watermark for non-FULL PostgreSQL loads or consults the per-file manifest for ADLS CSV, then copies data to a timestamped landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. PostgreSQL extraction now resolves both schema and table names from metadata. The ADLS CSV branch enumerates files, checks `ctrl.file_ingestion_manifest`, and copies unprocessed file versions individually. Landing folder names use a 24-hour timestamp with milliseconds and the ADF run ID to reduce collisions. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An unexpected empty FULL batch fails before Silver can overwrite its target; a FULL CSV feed with files already marked PROCESSED is a successful no-op. Empty incremental batches skip Silver writes and checkpoint advancement, then record a successful zero-row outcome.
 
 Gold orchestration reads active `SILVER_TO_GOLD` rows from `ctrl.table_config` and dynamically resolves each notebook from `gold_table_name`. All layers are metadata-driven; dataset-specific transformation logic resides in the corresponding Databricks notebooks.
 
@@ -92,13 +92,13 @@ The audit table is not a complete event log. Retain ADF activity output, Databri
 The source is extracted without a watermark predicate. Silver uses overwrite mode for the selected batch. Confirm the source extraction is complete before execution; a FULL retry can replace the target.
 
 ### APPEND
-The source watermark selects new data and Silver appends the batch. The current lab-results configuration uses `reported_at`. Replaying a previously written batch can duplicate rows because the append path does not inherently deduplicate by batch identity.
+For the ADLS CSV lab-results feed, the file manifest selects new file versions and Silver appends the corresponding batch. `reported_at` is a business event-time field, not the ADF file-selection checkpoint. Exact processed file versions are skipped, but a changed whole-file snapshot is a new version and can reappend rows that existed in the prior version. The feed should be immutable/additive or have a row-level deduplication policy.
 
 ### MERGE
-The watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at` and `patient_id`. Validate that the incoming batch has one deterministic row per merge key. The current notebook updates matched rows without comparing source-version timestamps to target versions.
+For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at` and `patient_id`. Validate that the incoming batch has one deterministic row per merge key. The current notebook updates matched rows without comparing source-version timestamps to target versions.
 
 ### Checkpoint caution
-The exported inner pipeline advances the watermark to `SYSUTCDATETIME()` after the Bronze-to-Silver notebook succeeds. It does not calculate the maximum source timestamp actually observed in the batch. Source extraction uses a strict greater-than predicate.
+For timestamp-watermarked PostgreSQL sources, the exported inner pipeline advances the watermark to `SYSUTCDATETIME()` after the Bronze-to-Silver notebook succeeds. It does not calculate the maximum source timestamp actually observed in the batch. Source extraction uses a strict greater-than predicate. ADLS CSV feeds do not use `ctrl.watermark`; their selection state is stored in `ctrl.file_ingestion_manifest`.
 
 Before manually advancing or repairing a checkpoint, establish:
 - The last complete source interval.
@@ -141,7 +141,7 @@ Check source system, table name, landing timestamp, file format, landing content
 Check the selected Bronze batch, target schema, configured load type, and merge keys. For MERGE, inspect null and duplicate keys. Determine whether the Silver write committed before a later activity failed. Reconcile the target before retrying.
 
 ### Watermark or audit update failure
-The success-audit activity now depends on the watermark-control activity succeeding. If data was written but the watermark update failed, the success audit is not written; the parent failure handler should mark the table run FAILED. Inspect the target and processed interval before retrying. APPEND replay may duplicate rows; MERGE replay may overwrite newer values if source ordering is not controlled. If the audit update itself fails after the checkpoint succeeds, validate data and checkpoint before repairing audit metadata.
+The success-audit activity runs only after file-manifest finalization and the watermark-control activity succeed. For PostgreSQL, if data was written but the watermark update failed, the success audit is not written; the parent failure handler should mark the table run FAILED. For CSV, inspect COPIED/PROCESSED manifest rows and the original landing batch before retrying. Inspect the target and processed interval before any checkpoint or manifest repair. APPEND replay may duplicate rows; MERGE replay may overwrite newer values if source ordering is not controlled. If the audit update itself fails after the checkpoint succeeds, validate data and checkpoint before repairing audit metadata.
 
 ### Gold notebook failure
 Identify the failed Gold metadata row and notebook path. Confirm required Silver inputs, catalog/schema permissions, and target state. Gold notebooks use `CREATE OR REPLACE TABLE`; inspect the target after a failed rebuild rather than assuming the prior output remains intact. Rerun only after confirming the full-rebuild behavior is acceptable.
