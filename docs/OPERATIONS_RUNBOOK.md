@@ -13,7 +13,7 @@ The ADF master pipeline, `PL_MASTER`, coordinates:
 3. Metadata-driven Silver-to-Gold execution.
 4. Email notification.
 
-The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. PostgreSQL extraction now resolves both schema and table names from metadata. Landing folder names use a 24-hour timestamp with milliseconds and the ADF run ID to reduce collisions. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An empty FULL batch fails before Silver can overwrite its target; an empty incremental batch skips Silver writes and watermark advancement, then records a successful zero-row outcome.
+The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. PostgreSQL extraction now resolves both schema and table names from metadata. The ADLS CSV branch enumerates files, checks `ctrl.file_ingestion_manifest`, and copies unprocessed file versions individually. Landing folder names use a 24-hour timestamp with milliseconds and the ADF run ID to reduce collisions. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An empty FULL batch fails before Silver can overwrite its target; an empty incremental batch skips Silver writes and watermark advancement, then records a successful zero-row outcome.
 
 Gold orchestration reads active `SILVER_TO_GOLD` rows from `ctrl.table_config` and dynamically resolves each notebook from `gold_table_name`. All layers are metadata-driven; dataset-specific transformation logic resides in the corresponding Databricks notebooks.
 
@@ -24,7 +24,8 @@ Before triggering a run:
 - Confirm PostgreSQL and ADLS sources are reachable and expected input files exist.
 - Verify ADF linked services, Key Vault references, ADLS containers, landing paths, Databricks access, Unity Catalog volumes, and target schemas.
 - Confirm active source and Gold rows in `ctrl.table_config`.
-- Confirm each APPEND/MERGE source has a `ctrl.watermark` row.
+- Confirm timestamp-watermarked PostgreSQL objects have a `ctrl.watermark` row.
+- Confirm `ctrl.file_ingestion_manifest` exists and inspect unresolved CSV file states before running ADLS feeds.
 - Review recent `ctrl.audit_log` records for failed or unfinished runs.
 - Check that no overlapping run is processing the same source or rebuilding the same Gold target.
 - Verify notebook paths and catalog/volume names in the target environment.
@@ -51,6 +52,13 @@ WHERE c.is_active = 1 AND c.load_type IN ('APPEND','MERGE');
 SELECT TOP (100) *
 FROM ctrl.audit_log
 ORDER BY created_timestamp DESC;
+
+SELECT file_manifest_id, table_id, source_path, source_file_name,
+       source_last_modified, source_file_size, source_content_md5,
+       status, adf_run_id, landing_path, last_error, updated_timestamp
+FROM ctrl.file_ingestion_manifest
+WHERE status <> 'PROCESSED'
+ORDER BY updated_timestamp DESC;
 ```
 
 ## 3. Normal run procedure
@@ -102,16 +110,32 @@ Before manually advancing or repairing a checkpoint, establish:
 
 Do not move a checkpoint forward simply to clear a failure. If the correct boundary is uncertain, pause scheduling and plan a controlled backfill.
 
+## 5A. CSV file manifest operations
+
+The ADLS CSV branch uses `ctrl.file_ingestion_manifest`; PostgreSQL timestamp-watermarked objects continue to use `ctrl.watermark`.
+
+Normal file lifecycle:
+
+1. ADF enumerates direct child items under the configured source folder and retains `.csv` files.
+2. It captures file size, last-modified timestamp, and content MD5 when available.
+3. A manifest lookup skips an exact version already marked `PROCESSED`.
+4. An unprocessed version is recorded as `IN_PROGRESS`, copied to the run's landing folder, and marked `COPIED`.
+5. After Bronze-to-Silver succeeds, the parent table/run marks those copied versions `PROCESSED`.
+
+A previous-run `COPIED` or `IN_PROGRESS` version blocks automatic recopy. This is intentional: the prior run may have committed Bronze or Silver even though final manifest status was not written. Check its `landing_path`, Bronze `landing_timestamp`, Silver target, ADF activity output, and watermark before recovery. A failed Copy version is retryable only after checking for partial target files.
+
+For a clean deployment, the first run processes every eligible CSV file because the new manifest starts empty. When enabling the manifest against populated Bronze/Silver targets, baseline previously processed source versions before scheduling to avoid replaying history. See [File Ingestion Manifest](FILE_INGESTION_MANIFEST.md) for the state machine and recovery checklist.
+
 ## 6. Failure diagnosis
 
 ### Source connection or authentication
 Inspect the failing linked service and activity. Verify network/firewall access, source availability, credentials, Key Vault references, and permissions. Never place credentials in logs or repository files. Rerun only after connectivity is confirmed.
 
 ### Missing files or landing path
-Inspect the Copy activity, source folder, sink folder, generated landing timestamp, and notebook parameters. The Landing-to-Bronze notebook requires the source/table parent paths to be accessible and returns `NO_DATA` only for a missing/empty batch landing path or a zero-row extract on an incremental load. A FULL load with no data fails before Silver is called. ADF Copy can itself fail before the notebook when its source file selection finds no files; diagnose that separately rather than treating every Copy failure as `NO_DATA`. Do not manually relabel a failed Copy as an empty successful batch.
+Inspect the List Source CSV Files Get Metadata activity, configured source folder, Filter output, manifest lookup, sink folder, generated landing timestamp, and notebook parameters. If the source folder exists but contains no eligible CSV files, the ForEach has zero iterations; Landing-to-Bronze returns `NO_DATA` for an incremental load and fails closed for a FULL load. If the source folder is missing or inaccessible, Get Metadata fails and must be treated as a path/permission problem, not an empty feed. PostgreSQL Copy returning zero rows is handled by the explicit no-data notebook path. Do not manually relabel a failed source activity as an empty successful batch.
 
 ### Landing-to-Bronze failure
-Check source system, table name, landing timestamp, file format, landing contents, volume access, and Bronze permissions. Reconcile Bronze rows for that timestamp before retrying. The notebook compares incoming field names and data types with the existing Bronze table and fails closed on schema drift; apply a reviewed schema migration before retrying. It also blocks appending a landing timestamp already present in Bronze. This prevents an exact same-batch replay, but a full pipeline rerun may extract the same source records into a new timestamped batch; APPEND idempotency across new batch IDs still requires a source/file identity ledger or deduplication key.
+Check source system, table name, landing timestamp, file format, landing contents, volume access, and Bronze permissions. Reconcile Bronze rows for that timestamp before retrying. The notebook compares incoming field names and data types with the existing Bronze table and fails closed on schema drift; apply a reviewed schema migration before retrying. It also blocks appending a landing timestamp already present in Bronze. For CSV feeds, inspect manifest rows: `IN_PROGRESS` means copy outcome is uncertain, `COPIED` means the file is in landing but downstream processing is not finalized, `FAILED` means the Copy failed, and `PROCESSED` means Bronze-to-Silver completed. A prior-run `IN_PROGRESS` or `COPIED` state blocks automatic recopy; use the stored `landing_path` to reconcile the original batch.
 
 ### Bronze-to-Silver failure
 Check the selected Bronze batch, target schema, configured load type, and merge keys. For MERGE, inspect null and duplicate keys. Determine whether the Silver write committed before a later activity failed. Reconcile the target before retrying.
@@ -125,11 +149,11 @@ Identify the failed Gold metadata row and notebook path. Confirm required Silver
 ## 7. Controlled rerun and backfill
 
 1. Pause overlapping or scheduled executions for the affected table.
-2. Record the ADF run ID, table ID, landing timestamp, watermark, and audit state.
+2. Record the ADF run ID, table ID, landing timestamp, watermark, manifest state, and audit state.
 3. Identify the last fully processed batch and whether Bronze/Silver writes committed.
 4. Preserve landing files and execution logs.
 5. Select the smallest safe recovery scope.
-6. For APPEND, check for duplicate batch rows before replay.
+6. For CSV APPEND, inspect the file manifest first. A prior-run `COPIED` or `IN_PROGRESS` file must be reconciled at its original landing path; do not reset it or recopy until Bronze/Silver commit state is known. For other APPEND replay, check for duplicate batch rows before replay.
 7. For MERGE, validate key uniqueness and source-version ordering.
 8. For FULL, confirm the source extraction is complete before overwriting.
 9. Change a watermark only after verifying the recovery boundary.
@@ -170,7 +194,10 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 - **Master dependencies:** Gold requires both source branches to be Succeeded. The notification branch intentionally uses Completed after Gold so it can report either outcome. Validate this behavior in the deployed factory with failure-injection tests.
 - **Watermark calculation:** checkpoint uses current UTC time rather than the maximum source timestamp processed. Test late arrivals and source clock differences.
 - **Strict watermark predicate:** equal-timestamp changes and precision boundaries need explicit handling.
-- **APPEND replay:** exact same landing-timestamp replay is blocked in Landing-to-Bronze. A new pipeline run receives a new batch ID, so re-extracting the same source files/records can still duplicate APPEND data; a durable source/file identity ledger or business-key deduplication policy is still needed.
+- **CSV manifest:** exact file versions are tracked by table, source path/name, last-modified time, size, and optional content MD5. Only `PROCESSED` versions are skipped; unresolved prior-run `IN_PROGRESS`/`COPIED` versions fail closed for manual reconciliation. This is a conservative recovery gate, not a distributed exactly-once transaction.
+- **CSV file replacement:** a changed file version is treated as a new delivery. APPEND can duplicate rows if a partner overwrites a whole file; current feed semantics should remain immutable/additive or require row-level deduplication.
+- **Manifest scale:** ADF Get Metadata child-item output is limited to 4 MB; partition large source directories or adopt storage inventory/event-driven ingestion when necessary.
+- **APPEND replay:** PostgreSQL/other APPEND replay and changed CSV versions still require a defined row-level deduplication or replacement policy.
 - **MERGE source uniqueness:** validate one source row per key and deterministic ordering.
 - **No CDC contract:** hard deletes and late-arriving updates need separate policies.
 - **Gold rebuilds:** Gold notebooks replace their targets rather than incrementally merging changes.
