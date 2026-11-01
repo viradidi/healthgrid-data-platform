@@ -108,10 +108,94 @@ jobs:
               "docs/VALIDATION_PLAN.md",
               "docs/DEPLOYMENT.md",
               "docs/ARTIFACT_AUDIT.md",
+              "docs/FILE_INGESTION_MANIFEST.md",
           ]
           for name in required_docs:
               if not Path(name).is_file():
                   errors.append(f"Required documentation missing: {name}")
+
+          # Static contract checks for the metadata-driven ADLS CSV file manifest.
+          pipeline_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
+          dataset_path = Path("04_Azure Data Factory Repository/dataset/DS_Csv_Binary_File.json")
+          control_sql_path = Path("02_Metadata Table Queries/create_control_tables.sql")
+          reset_sql_path = Path("02_Metadata Table Queries/drop_control_tables.sql")
+          landing_notebook_path = Path("05_Databricks_Repository/Landing_to_Bronze.ipynb")
+          try:
+              pipeline = json.loads(pipeline_path.read_text(encoding="utf-8"))
+              top_activities = pipeline["properties"]["activities"]
+              by_name = {activity["name"]: activity for activity in top_activities}
+              switch = by_name["Check Source System"]
+              csv_case = next(case for case in switch["typeProperties"]["cases"] if case["value"] == "adls_csv")
+              csv_activities = {activity["name"]: activity for activity in csv_case["activities"]}
+              foreach = csv_activities["Ingest New CSV Files"]
+              nested = {activity["name"]: activity for activity in foreach["typeProperties"]["activities"]}
+              manifest_branch = nested["If File Needs Ingestion"]["typeProperties"]["ifTrueActivities"]
+              manifest_branch_names = {activity["name"] for activity in manifest_branch}
+
+              required_csv_activities = {
+                  "List Source CSV Files", "Filter CSV Files",
+                  "Validate FULL CSV inventory", "Ingest New CSV Files",
+              }
+              missing_csv_activities = required_csv_activities - set(csv_activities)
+              if missing_csv_activities:
+                  errors.append(f"CSV manifest orchestration activities missing: {sorted(missing_csv_activities)}")
+
+              required_file_activities = {
+                  "Read Current File Metadata", "Check File Manifest", "If File Needs Ingestion",
+              }
+              missing_file_activities = required_file_activities - set(nested)
+              if missing_file_activities:
+                  errors.append(f"Per-file manifest activities missing: {sorted(missing_file_activities)}")
+
+              required_manifest_steps = {
+                  "Record File In Progress", "Copy CSV File to Landing",
+                  "Mark File Copied", "Mark File Copy Failed", "Fail CSV File Ingestion",
+              }
+              if not required_manifest_steps.issubset(manifest_branch_names):
+                  errors.append("Per-file manifest state/copy/failure handling is incomplete.")
+
+              file_metadata = nested.get("Read Current File Metadata", {}).get("typeProperties", {})
+              if not {"size", "lastModified", "contentMD5"}.issubset(set(file_metadata.get("fieldList", []))):
+                  errors.append("Per-file Get Metadata must request size, lastModified, and contentMD5.")
+
+              processed = by_name.get("Mark File Manifest Processed", {})
+              processed_dependencies = processed.get("dependsOn", [])
+              if not any(
+                  dep.get("activity") == "Bronze to Silver"
+                  and "Succeeded" in dep.get("dependencyConditions", [])
+                  for dep in processed_dependencies
+              ):
+                  errors.append("File manifest must transition to PROCESSED only after Bronze-to-Silver succeeds.")
+
+              watermark_gate = by_name.get("Check load type", {}).get("typeProperties", {}).get("expression", {}).get("value", "")
+              checkpoint_gate = by_name.get("Checking Load Type and Update Watermark", {}).get("typeProperties", {}).get("expression", {}).get("value", "")
+              if "neon_postgres" not in watermark_gate or "neon_postgres" not in checkpoint_gate:
+                  errors.append("Timestamp watermark lookup/update must be limited to PostgreSQL sources.")
+
+              file_dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+              file_location = file_dataset["properties"]["typeProperties"]["location"]
+              if file_location.get("fileName", {}).get("value") != "@dataset().fileName":
+                  errors.append("Parameterized single-file ADLS dataset must bind fileName from its dataset parameter.")
+
+              control_sql = control_sql_path.read_text(encoding="utf-8")
+              reset_sql = reset_sql_path.read_text(encoding="utf-8")
+              if "CREATE TABLE ctrl.file_ingestion_manifest" not in control_sql:
+                  errors.append("Control DDL is missing ctrl.file_ingestion_manifest.")
+              if "UQ_file_ingestion_manifest_identity" not in control_sql:
+                  errors.append("File manifest must enforce a unique file-version identity.")
+              if "DROP TABLE ctrl.file_ingestion_manifest" not in reset_sql:
+                  errors.append("Disposable reset script must drop the file manifest before parent control tables.")
+
+              landing_notebook = json.loads(landing_notebook_path.read_text(encoding="utf-8"))
+              landing_source = "\n".join(
+                  "".join(cell.get("source", []))
+                  for cell in landing_notebook.get("cells", [])
+                  if cell.get("cell_type") == "code"
+              )
+              if 'source_system == "adls_csv"' not in landing_source or 'dbutils.notebook.exit("NO_DATA")' not in landing_source:
+                  errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
+          except Exception as exc:
+              errors.append(f"CSV manifest contract validation failed: {exc}")
 
           readme = Path("README.md").read_text(encoding="utf-8") if Path("README.md").exists() else ""
           if "![HealthGrid Data Platform Architecture](assets/architecture-overview.png)" not in readme:
