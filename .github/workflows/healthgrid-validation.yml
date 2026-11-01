@@ -1,0 +1,126 @@
+name: HealthGrid Repository Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.json"
+      - "**/*.ipynb"
+      - "**/*.py"
+      - "**/*.md"
+      - ".github/workflows/healthgrid-validation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.json"
+      - "**/*.ipynb"
+      - "**/*.py"
+      - "**/*.md"
+      - ".github/workflows/healthgrid-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate repository artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate JSON, notebooks, Python, docs, and secret hygiene
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          import json
+          import re
+          import sys
+          from pathlib import Path
+
+          errors = []
+          json_files = list(Path(".").rglob("*.json"))
+          notebook_files = list(Path(".").rglob("*.ipynb"))
+          python_files = list(Path(".").rglob("*.py"))
+
+          excluded = {".git", ".venv", "venv", "__pycache__"}
+          def included(path):
+              return not any(part in excluded for part in path.parts)
+
+          json_files = [p for p in json_files if included(p)]
+          notebook_files = [p for p in notebook_files if included(p)]
+          python_files = [p for p in python_files if included(p)]
+
+          for path in json_files:
+              try:
+                  json.loads(path.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  errors.append(f"Invalid JSON: {path}: {exc}")
+
+          for path in notebook_files:
+              try:
+                  notebook = json.loads(path.read_text(encoding="utf-8"))
+                  for index, cell in enumerate(notebook.get("cells", [])):
+                      if cell.get("cell_type") == "code":
+                          source = cell.get("source", [])
+                          source = "".join(source) if isinstance(source, list) else source
+                          compile(source, f"{path}:cell-{index}", "exec")
+              except Exception as exc:
+                  errors.append(f"Invalid notebook or code cell: {path}: {exc}")
+
+          for path in python_files:
+              try:
+                  ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+              except Exception as exc:
+                  errors.append(f"Invalid Python syntax: {path}: {exc}")
+
+          required_docs = [
+              "README.md",
+              "docs/ENGINEERING_DECISIONS.md",
+              "docs/DATA_DICTIONARY.md",
+              "docs/OPERATIONS_RUNBOOK.md",
+              "docs/VALIDATION_PLAN.md",
+              "docs/DEPLOYMENT.md",
+              "docs/ARTIFACT_AUDIT.md",
+          ]
+          for name in required_docs:
+              if not Path(name).is_file():
+                  errors.append(f"Required documentation missing: {name}")
+
+          readme = Path("README.md").read_text(encoding="utf-8") if Path("README.md").exists() else ""
+          if "![HealthGrid Data Platform Architecture](assets/architecture-overview.png)" not in readme:
+              errors.append("README must retain the original architecture image embed.")
+
+          # Detect common committed credential patterns without printing matched values.
+          secret_patterns = [
+              re.compile(r"https://[^\s\"']+logic\.azure\.com/[^\s\"']*[?&]sig=[A-Za-z0-9%_\-]{20,}", re.I),
+              re.compile(r"(?:AccountKey|SharedAccessSignature)=[^;\s\"']{12,}", re.I),
+              re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+          ]
+          scan_files = [
+              p for p in Path(".").rglob("*")
+              if p.is_file() and included(p)
+              and p.suffix.lower() in {".json", ".py", ".sql", ".yml", ".yaml", ".md", ".txt", ".conf"}
+          ]
+          for path in scan_files:
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              for pattern in secret_patterns:
+                  if pattern.search(text):
+                      errors.append(f"Potential committed credential pattern detected in {path}; value suppressed.")
+
+          print(f"Validated {len(json_files)} JSON files, {len(notebook_files)} notebooks, and {len(python_files)} Python files.")
+          if errors:
+              print("\n".join(f"ERROR: {error}" for error in errors))
+              sys.exit(1)
+          print("Repository artifact validation passed.")
+          PY
