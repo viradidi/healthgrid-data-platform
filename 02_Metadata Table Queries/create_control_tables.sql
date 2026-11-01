@@ -1,7 +1,7 @@
 /* =====================================================================
    CareSync Health Network — Control/Metadata Framework
    Target: Azure SQL Database
-   Creates the ctrl schema + 3 control tables, then seeds table_config
+   Creates the ctrl schema + control/metadata tables, then seeds table_config
    with the 5 source objects (3 Postgres tables + 2 ADLS CSV files)
    and initial watermark rows for the incremental ones.
    ===================================================================== */
@@ -65,6 +65,43 @@ CREATE TABLE ctrl.audit_log (
 );
 GO
 
+/* ---------------------------------------------------------------------
+   4. ctrl.file_ingestion_manifest — one source-file version per metadata
+      object. A file is considered ingested only after its copied batch has
+      completed Bronze and Silver processing.
+   --------------------------------------------------------------------- */
+CREATE TABLE ctrl.file_ingestion_manifest (
+    file_manifest_id       BIGINT IDENTITY(1,1) PRIMARY KEY,
+    table_id               INT           NOT NULL REFERENCES ctrl.table_config (table_id),
+    source_path            NVARCHAR(500) NOT NULL,
+    source_file_name       NVARCHAR(260) NOT NULL,
+    source_last_modified   DATETIME2(7)  NOT NULL,
+    source_file_size       BIGINT        NOT NULL CHECK (source_file_size >= 0),
+    source_content_md5     NVARCHAR(64)  NOT NULL DEFAULT N'',
+    status                 VARCHAR(20)   NOT NULL
+                           CHECK (status IN ('IN_PROGRESS','COPIED','PROCESSED','FAILED')),
+    adf_run_id             VARCHAR(100)  NOT NULL,
+    landing_path           NVARCHAR(1000) NULL,
+    last_error             NVARCHAR(2000) NULL,
+    discovered_timestamp   DATETIME2(7)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    updated_timestamp      DATETIME2(7)  NOT NULL DEFAULT SYSUTCDATETIME(),
+    processed_timestamp    DATETIME2(7)  NULL,
+    CONSTRAINT UQ_file_ingestion_manifest_identity UNIQUE
+    (
+        table_id,
+        source_path,
+        source_file_name,
+        source_last_modified,
+        source_file_size,
+        source_content_md5
+    )
+);
+GO
+
+CREATE INDEX IX_file_ingestion_manifest_status
+    ON ctrl.file_ingestion_manifest (table_id, status, adf_run_id);
+GO
+
 /* =====================================================================
    Seed data — ctrl.table_config
    3 Postgres tables (internal) + 2 ADLS CSV files (external partners)
@@ -118,7 +155,8 @@ GO
    3 analytics/reporting tables, each built by joining/aggregating multiple
    silver tables — no single source table, so source_table_name,
    bronze_table_name and silver_table_name are all NULL; the join/aggregation
-   logic is hardcoded inside each gold notebook, not driven by this metadata.
+   target selection and execution are driven by metadata; dataset-specific
+   transformation logic remains in the corresponding Gold notebooks.
    Full rebuild every run (load_type = FULL), no watermark/merge keys.
    ===================================================================== */
 
