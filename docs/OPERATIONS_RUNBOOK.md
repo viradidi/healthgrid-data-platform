@@ -13,7 +13,7 @@ The ADF master pipeline, `PL_MASTER`, coordinates:
 3. Metadata-driven Silver-to-Gold execution.
 4. Email notification.
 
-The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An empty FULL batch fails before Silver can overwrite its target; an empty incremental batch skips Silver writes and watermark advancement, then records a successful zero-row outcome.
+The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. PostgreSQL extraction now resolves both schema and table names from metadata. Landing folder names use a 24-hour timestamp with milliseconds and the ADF run ID to reduce collisions. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An empty FULL batch fails before Silver can overwrite its target; an empty incremental batch skips Silver writes and watermark advancement, then records a successful zero-row outcome.
 
 Gold orchestration reads active `SILVER_TO_GOLD` rows from `ctrl.table_config` and dynamically resolves each notebook from `gold_table_name`. All layers are metadata-driven; dataset-specific transformation logic resides in the corresponding Databricks notebooks.
 
@@ -111,7 +111,7 @@ Inspect the failing linked service and activity. Verify network/firewall access,
 Inspect the Copy activity, source folder, sink folder, generated landing timestamp, and notebook parameters. The Landing-to-Bronze notebook requires the source/table parent paths to be accessible and returns `NO_DATA` only for a missing/empty batch landing path or a zero-row extract on an incremental load. A FULL load with no data fails before Silver is called. ADF Copy can itself fail before the notebook when its source file selection finds no files; diagnose that separately rather than treating every Copy failure as `NO_DATA`. Do not manually relabel a failed Copy as an empty successful batch.
 
 ### Landing-to-Bronze failure
-Check source system, table name, landing timestamp, file format, landing contents, volume access, and Bronze permissions. Reconcile Bronze rows for that timestamp before retrying. The notebook appends to Bronze, so replaying a batch already written can duplicate it.
+Check source system, table name, landing timestamp, file format, landing contents, volume access, and Bronze permissions. Reconcile Bronze rows for that timestamp before retrying. The notebook compares incoming field names and data types with the existing Bronze table and fails closed on schema drift; apply a reviewed schema migration before retrying. It also blocks appending a landing timestamp already present in Bronze. This prevents an exact same-batch replay, but a full pipeline rerun may extract the same source records into a new timestamped batch; APPEND idempotency across new batch IDs still requires a source/file identity ledger or deduplication key.
 
 ### Bronze-to-Silver failure
 Check the selected Bronze batch, target schema, configured load type, and merge keys. For MERGE, inspect null and duplicate keys. Determine whether the Silver write committed before a later activity failed. Reconcile the target before retrying.
@@ -170,11 +170,13 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 - **Master dependencies:** Gold requires both source branches to be Succeeded. The notification branch intentionally uses Completed after Gold so it can report either outcome. Validate this behavior in the deployed factory with failure-injection tests.
 - **Watermark calculation:** checkpoint uses current UTC time rather than the maximum source timestamp processed. Test late arrivals and source clock differences.
 - **Strict watermark predicate:** equal-timestamp changes and precision boundaries need explicit handling.
-- **APPEND replay:** landing and Silver append paths are not inherently deduplicated by batch identity.
+- **APPEND replay:** exact same landing-timestamp replay is blocked in Landing-to-Bronze. A new pipeline run receives a new batch ID, so re-extracting the same source files/records can still duplicate APPEND data; a durable source/file identity ledger or business-key deduplication policy is still needed.
 - **MERGE source uniqueness:** validate one source row per key and deterministic ordering.
 - **No CDC contract:** hard deletes and late-arriving updates need separate policies.
 - **Gold rebuilds:** Gold notebooks replace their targets rather than incrementally merging changes.
-- **No-data handling:** empty FULL batches fail before Silver overwrite; empty incremental batches skip Silver and checkpoint updates and are recorded as successful with zero rows. ADF Copy no-file errors still need their own source-branch diagnosis and runtime test.
+- **No-data handling:** empty FULL batches fail before Silver overwrite; empty incremental batches skip Silver and checkpoint updates and are recorded as successful with zero rows when the Copy activity completes and the notebook can inspect the resulting landing path. ADF Copy no-file errors that fail the Copy activity occur before the notebook and still need a separate source-branch handling decision and runtime test.
+- **Schema evolution:** the current Landing-to-Bronze policy rejects field additions, removals, or data-type changes against an existing Bronze table. This is intentional fail-closed behavior; schema changes require a reviewed migration and updated validation evidence.
+- **Landing batch identity:** folders use a 24-hour timestamp with milliseconds plus the parent ADF run ID. This reduces accidental path collisions but does not provide cross-run data deduplication.
 - **Parallel processing:** ForEach activities run in parallel. Check for duplicate target configurations and shared-resource conflicts.
 - **Legacy identifiers:** verify CareSync catalog, volume, and notebook paths in the restored workspace.
 - **Destructive source setup:** the PostgreSQL source creation script drops existing source tables. Treat it as a disposable environment reset, not a production migration.
