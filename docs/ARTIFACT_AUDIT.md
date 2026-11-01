@@ -55,7 +55,7 @@ Revocation addresses credential validity. Repository cleanup addresses accidenta
 
 ### Master pipeline dependency semantics
 
-The master pipeline uses Completed dependencies between source branches and the Gold branch. Validate that a failed required source branch cannot lead to Gold being accepted as a successful end-to-end result. Consider explicit Succeeded dependencies or a dedicated quality gate.
+The master pipeline was updated so Gold requires both source branches to be Succeeded. The notification branch intentionally remains dependent on Gold being Completed, allowing notification after either a successful or failed Gold run. Verify these dependency semantics with failure-injection tests after redeployment.
 
 ### Replay and checkpoint guarantees
 
