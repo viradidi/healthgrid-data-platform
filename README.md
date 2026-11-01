@@ -82,7 +82,7 @@ The Bronze-to-Silver notebook processes the Bronze records for the current landi
 - **APPEND:** append the current batch to the Silver target.
 - **MERGE:** match configured business keys and update matched rows or insert new rows.
 
-The framework validates that merge keys are provided and exist in the incoming data before executing a MERGE.
+For MERGE, the framework passes the metadata-configured source version column, rejects null or duplicate business keys, and updates matched rows only when the incoming source version is newer. Equal-version conflicts fail rather than silently overwriting data.
 
 A calendar dimension is also prepared in Silver to support date-based reporting.
 
