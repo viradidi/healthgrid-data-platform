@@ -136,10 +136,10 @@ One configuration row represents a source object/file or a Gold output. This is 
 | Column | Meaning |
 |---|---|
 | table_id | Primary key and reference to ctrl.table_config |
-| watermark_value | Persisted checkpoint value for an incremental source |
+| watermark_value | Persisted timestamp checkpoint for timestamp-watermarked sources (PostgreSQL in this project) |
 | last_updated_timestamp | Time the checkpoint record was updated |
 
-Initial watermark rows are seeded for APPEND and MERGE source configurations.
+Timestamp watermark rows are seeded for PostgreSQL incremental configurations. ADLS CSV sources use the file manifest instead of `ctrl.watermark`.
 
 ### 3.3 ctrl.audit_log
 
@@ -157,6 +157,27 @@ Initial watermark rows are seeded for APPEND and MERGE source configurations.
 
 The audit table records processing status per configured object and stage, rather than relying only on a single overall pipeline status.
 
+### 3.4 ctrl.file_ingestion_manifest
+
+| Column | Meaning |
+|---|---|
+| file_manifest_id | Unique file-version manifest record |
+| table_id | Reference to the source metadata configuration |
+| source_path | Configured source folder |
+| source_file_name | Name of the individual CSV file |
+| source_last_modified | Last-modified timestamp observed by ADF |
+| source_file_size | File size in bytes |
+| source_content_md5 | ADLS content MD5 when available; empty when unavailable |
+| status | IN_PROGRESS, COPIED, PROCESSED, or FAILED |
+| adf_run_id | Parent ADF run that currently owns the file version |
+| landing_path | Timestamped landing folder for the copied file |
+| last_error | Copy error detail where available |
+| discovered_timestamp | First manifest record creation time |
+| updated_timestamp | Most recent state update time |
+| processed_timestamp | Time the file version reached PROCESSED |
+
+The unique file-version identity combines table_id, source_path, source_file_name, source_last_modified, source_file_size, and source_content_md5. PROCESSED means the file has completed the Bronze-to-Silver path. Previous-run IN_PROGRESS/COPIED entries are blocked for manual reconciliation rather than automatically recopied.
+
 ## 4. Configured source-to-Silver objects
 
 | Source system | Source object | Bronze target | Silver target | Strategy | Watermark / key |
@@ -164,7 +185,7 @@ The audit table records processing status per configured object and stage, rathe
 | neon_postgres | hospitals | hospitals | hospitals | FULL | — |
 | neon_postgres | doctors | doctors | doctors | FULL | — |
 | neon_postgres | patients | patients | patients | MERGE | updated_at / patient_id |
-| adls_csv | lab_results | lab_results | lab_results | APPEND | reported_at |
+| adls_csv | lab_results | lab_results | lab_results | APPEND | File manifest; reported_at is a business event-time field |
 | adls_csv | insurance_providers | insurance_providers | insurance_providers | FULL | — |
 
 The active metadata rows are the source of truth for the configured processing targets and strategies.
