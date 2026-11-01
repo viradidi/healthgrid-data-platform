@@ -61,7 +61,8 @@ CREATE TABLE ctrl.audit_log (
     records_written    INT           NULL,
     start_time         DATETIME2     NULL,
     end_time           DATETIME2     NULL,
-    created_timestamp  DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
+    created_timestamp  DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_audit_log_run_table_stage UNIQUE (adf_run_id, table_id, stage)
 );
 GO
 
