@@ -1,7 +1,7 @@
 /* =====================================================================
    CareSync Health Network — Control/Metadata Framework
    Target: Azure SQL Database
-   Drops the 3 control tables in FK-safe order (child tables first).
+   Drops the 4 control tables in FK-safe order (child tables first).
    Run this before re-running create_control_tables.sql.
    ===================================================================== */
 
