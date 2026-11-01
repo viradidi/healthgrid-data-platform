@@ -119,13 +119,16 @@ The current Landing-to-Bronze notebook appends rows and adds batch/insert timest
 | SLV-09 | New key | Add patient with new patient_id | Exactly one new target row is inserted |
 | SLV-10 | Existing key update | Change patient field and advance updated_at | Existing row is updated, not duplicated |
 | SLV-11 | Repeated unchanged record | Reprocess same patient values | One row remains per patient_id |
-| SLV-12 | Duplicate source keys | Supply two source rows with same merge key | Batch is rejected or deterministically reduced before MERGE |
-| SLV-13 | Null merge key | Supply null patient_id | Invalid row is rejected/quarantined |
-| SLV-14 | Late/out-of-order update | Process older source version after newer target version | Older data cannot overwrite newer data, or limitation is explicitly accepted |
-| SLV-15 | Missing merge-key column | Remove patient_id from fixture | Notebook fails before target mutation |
+| SLV-12 | Duplicate source keys | Supply two source rows with the same configured merge key | Notebook rejects the batch before target mutation; no arbitrary winner is selected |
+| SLV-13 | Null merge key or source version | Supply a null business key or null configured version value | Notebook rejects the batch before target mutation |
+| SLV-14 | Late/out-of-order update | Process an older source version after a newer target version | Existing target row remains unchanged; stale-row count is logged |
+| SLV-15 | Missing merge metadata | Remove the merge-key column or configured source-version column | Notebook fails before target mutation |
 | SLV-16 | Empty MERGE batch | Process an incremental batch with no records | Silver write is skipped; existing target remains unchanged; checkpoint is not advanced |
+| SLV-17 | Equal-version replay | Reprocess the same business payload with the same source version | Existing row remains unchanged; no duplicate is inserted |
+| SLV-18 | Equal-version conflict | Supply changed business values with the same key and source version | Notebook rejects the batch before MERGE |
+| SLV-19 | Invalid existing target | Seed duplicate/null target keys or null target versions | Notebook blocks MERGE and requires target reconciliation |
 
-The current MERGE notebook checks that configured key columns exist, but does not itself prove source-key uniqueness or compare source versions against target versions. SLV-12 and SLV-14 are explicit hardening gates.
+The shared notebook receives the configured watermark column from active source metadata as its MERGE source-version field. MERGE rejects null or duplicate source keys, null source versions, invalid target keys, and incompatible target schemas. It updates a matched row only when the incoming version is strictly newer. Equal-version identical replays are no-ops; equal-version payload conflicts are rejected. Static CI checks enforce the code/configuration contract, while the Databricks-specific data scenarios above still require execution in a deployed workspace.
 
 ## 7. Watermark and checkpoint tests
 
