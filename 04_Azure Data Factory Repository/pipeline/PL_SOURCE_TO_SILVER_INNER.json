@@ -262,11 +262,47 @@
     }
    },
    {
+    "name": "Mark File Manifest Processed",
+    "type": "Script",
+    "dependsOn": [
+     {
+      "activity": "Bronze to Silver",
+      "dependencyConditions": [
+       "Succeeded"
+      ]
+     }
+    ],
+    "policy": {
+     "timeout": "0.12:00:00",
+     "retry": 2,
+     "retryIntervalInSeconds": 30,
+     "secureOutput": false,
+     "secureInput": false
+    },
+    "userProperties": [],
+    "linkedServiceName": {
+     "referenceName": "LS_AzureSqlDatabase",
+     "type": "LinkedServiceReference"
+    },
+    "typeProperties": {
+     "scripts": [
+      {
+       "type": "Query",
+       "text": {
+        "value": "UPDATE ctrl.file_ingestion_manifest\nSET status = 'PROCESSED',\n    processed_timestamp = SYSUTCDATETIME(),\n    updated_timestamp = SYSUTCDATETIME(),\n    last_error = NULL\nWHERE table_id = @{pipeline().parameters.table_id}\n  AND adf_run_id = '@{pipeline().parameters.adf_run_id}'\n  AND status = 'COPIED'",
+        "type": "Expression"
+       }
+      }
+     ],
+     "scriptBlockExecutionTimeout": "02:00:00"
+    }
+   },
+   {
     "name": "Checking Load Type and Update Watermark",
     "type": "IfCondition",
     "dependsOn": [
      {
-      "activity": "Bronze to Silver",
+      "activity": "Mark File Manifest Processed",
       "dependencyConditions": [
        "Succeeded"
       ]
@@ -398,43 +434,19 @@
        "value": "adls_csv",
        "activities": [
         {
-         "name": "Ingest CSV from source to Landing",
-         "type": "Copy",
+         "name": "List Source CSV Files",
+         "type": "GetMetadata",
          "dependsOn": [],
          "policy": {
           "timeout": "0.12:00:00",
-          "retry": 0,
+          "retry": 1,
           "retryIntervalInSeconds": 30,
           "secureOutput": false,
           "secureInput": false
          },
          "userProperties": [],
          "typeProperties": {
-          "source": {
-           "type": "BinarySource",
-           "storeSettings": {
-            "type": "AzureBlobFSReadSettings",
-            "recursive": false,
-            "modifiedDatetimeStart": {
-             "value": "@variables('watermarl_value')",
-             "type": "Expression"
-            },
-            "deleteFilesAfterCompletion": false
-           },
-           "formatSettings": {
-            "type": "BinaryReadSettings"
-           }
-          },
-          "sink": {
-           "type": "BinarySink",
-           "storeSettings": {
-            "type": "AzureBlobFSWriteSettings"
-           }
-          },
-          "enableStaging": false
-         },
-         "inputs": [
-          {
+          "dataset": {
            "referenceName": "DS_Csv_Binary",
            "type": "DatasetReference",
            "parameters": {
@@ -444,21 +456,348 @@
             },
             "container": "source"
            }
+          },
+          "fieldList": [
+           "childItems"
+          ],
+          "storeSettings": {
+           "type": "AzureBlobFSReadSettings",
+           "recursive": false
+          }
+         }
+        },
+        {
+         "name": "Filter CSV Files",
+         "type": "Filter",
+         "dependsOn": [
+          {
+           "activity": "List Source CSV Files",
+           "dependencyConditions": [
+            "Succeeded"
+           ]
           }
          ],
-         "outputs": [
-          {
-           "referenceName": "DS_Csv_Binary",
-           "type": "DatasetReference",
-           "parameters": {
-            "folder": {
-             "value": "@concat(\n    activity('Read Table Details').output.firstRow.source_system,\n    '/',\n    activity('Read Table Details').output.firstRow.source_table_name,\n    '/',\n    variables('start_time')\n)",
-             "type": "Expression"
-            },
-            "container": "landing"
-           }
+         "userProperties": [],
+         "typeProperties": {
+          "items": {
+           "value": "@activity('List Source CSV Files').output.childItems",
+           "type": "Expression"
+          },
+          "condition": {
+           "value": "@and(equals(item().type,'File'),endsWith(toLower(item().name),'.csv'))",
+           "type": "Expression"
           }
-         ]
+         }
+        },
+        {
+         "name": "Ingest New CSV Files",
+         "type": "ForEach",
+         "dependsOn": [
+          {
+           "activity": "Filter CSV Files",
+           "dependencyConditions": [
+            "Succeeded"
+           ]
+          }
+         ],
+         "userProperties": [],
+         "typeProperties": {
+          "items": {
+           "value": "@activity('Filter CSV Files').output.value",
+           "type": "Expression"
+          },
+          "isSequential": true,
+          "activities": [
+           {
+            "name": "Read Current File Metadata",
+            "type": "GetMetadata",
+            "dependsOn": [],
+            "policy": {
+             "timeout": "0.12:00:00",
+             "retry": 1,
+             "retryIntervalInSeconds": 30,
+             "secureOutput": false,
+             "secureInput": false
+            },
+            "userProperties": [],
+            "typeProperties": {
+             "dataset": {
+              "referenceName": "DS_Csv_Binary_File",
+              "type": "DatasetReference",
+              "parameters": {
+               "folder": {
+                "value": "@activity('Read Table Details').output.firstRow.source_path",
+                "type": "Expression"
+               },
+               "container": "source",
+               "fileName": {
+                "value": "@item().name",
+                "type": "Expression"
+               }
+              }
+             },
+             "fieldList": [
+              "size",
+              "lastModified",
+              "contentMD5"
+             ],
+             "storeSettings": {
+              "type": "AzureBlobFSReadSettings"
+             }
+            }
+           },
+           {
+            "name": "Check File Manifest",
+            "type": "Lookup",
+            "dependsOn": [
+             {
+              "activity": "Read Current File Metadata",
+              "dependencyConditions": [
+               "Succeeded"
+              ]
+             }
+            ],
+            "policy": {
+             "timeout": "0.12:00:00",
+             "retry": 1,
+             "retryIntervalInSeconds": 30,
+             "secureOutput": false,
+             "secureInput": false
+            },
+            "userProperties": [],
+            "typeProperties": {
+             "source": {
+              "type": "AzureSqlSource",
+              "sqlReaderQuery": {
+               "value": "SELECT\n    CASE WHEN EXISTS (\n        SELECT 1 FROM ctrl.file_ingestion_manifest\n        WHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}'\n          AND status = 'PROCESSED'\n    ) THEN CAST(1 AS INT) ELSE CAST(0 AS INT) END AS is_processed,\n    COALESCE((\n        SELECT TOP (1) status FROM ctrl.file_ingestion_manifest\n        WHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}'\n        ORDER BY file_manifest_id DESC\n    ), 'NEW') AS manifest_status,\n    COALESCE((\n        SELECT TOP (1) adf_run_id FROM ctrl.file_ingestion_manifest\n        WHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}'\n        ORDER BY file_manifest_id DESC\n    ), '') AS previous_run_id",
+               "type": "Expression"
+              },
+              "queryTimeout": "02:00:00",
+              "partitionOption": "None"
+             },
+             "dataset": {
+              "referenceName": "AzureSqlTable1",
+              "type": "DatasetReference"
+             },
+             "firstRowOnly": true
+            }
+           },
+           {
+            "name": "If File Needs Ingestion",
+            "type": "IfCondition",
+            "dependsOn": [
+             {
+              "activity": "Check File Manifest",
+              "dependencyConditions": [
+               "Succeeded"
+              ]
+             }
+            ],
+            "userProperties": [],
+            "typeProperties": {
+             "expression": {
+              "value": "@equals(activity('Check File Manifest').output.firstRow.is_processed,0)",
+              "type": "Expression"
+             },
+             "ifTrueActivities": [
+              {
+               "name": "Record File In Progress",
+               "type": "Script",
+               "dependsOn": [],
+               "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 1,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+               },
+               "userProperties": [],
+               "linkedServiceName": {
+                "referenceName": "LS_AzureSqlDatabase",
+                "type": "LinkedServiceReference"
+               },
+               "typeProperties": {
+                "scripts": [
+                 {
+                  "type": "Query",
+                  "text": {
+                   "value": "BEGIN TRY\n    BEGIN TRANSACTION;\n\n    IF EXISTS (\n        SELECT 1 FROM ctrl.file_ingestion_manifest\n        WHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}' AND status = 'PROCESSED'\n    )\n        THROW 51001, 'This source file version was processed by another run. Refresh the manifest lookup and skip it.', 1;\n\n    IF EXISTS (\n        SELECT 1 FROM ctrl.file_ingestion_manifest\n        WHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}'\n          AND status IN ('IN_PROGRESS','COPIED')\n          AND adf_run_id <> '@{pipeline().parameters.adf_run_id}'\n    )\n        THROW 51002, 'This source file has an incomplete prior run. Reconcile its landing/Bronze/Silver state before retrying.', 1;\n\n    UPDATE ctrl.file_ingestion_manifest\n    SET status = 'IN_PROGRESS',\n        adf_run_id = '@{pipeline().parameters.adf_run_id}',\n        landing_path = N'@{concat(activity('Read Table Details').output.firstRow.source_system,'/',activity('Read Table Details').output.firstRow.source_table_name,'/',variables('start_time'))}',\n        last_error = NULL,\n        updated_timestamp = SYSUTCDATETIME()\n    WHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}';\n\n    IF @@ROWCOUNT = 0\n    BEGIN\n        INSERT INTO ctrl.file_ingestion_manifest\n        (\n            table_id, source_path, source_file_name, source_last_modified,\n            source_file_size, source_content_md5, status, adf_run_id, landing_path\n        )\n        VALUES\n        (\n            @{pipeline().parameters.table_id},\n            N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}',\n            N'@{replace(item().name,'''','''''')}',\n            CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7)),\n            @{activity('Read Current File Metadata').output.size},\n            N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}',\n            'IN_PROGRESS',\n            '@{pipeline().parameters.adf_run_id}',\n            N'@{concat(activity('Read Table Details').output.firstRow.source_system,'/',activity('Read Table Details').output.firstRow.source_table_name,'/',variables('start_time'))}'\n        );\n    END;\n\n    COMMIT TRANSACTION;\nEND TRY\nBEGIN CATCH\n    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;\n    THROW;\nEND CATCH",
+                   "type": "Expression"
+                  }
+                 }
+                ],
+                "scriptBlockExecutionTimeout": "02:00:00"
+               }
+              },
+              {
+               "name": "Copy CSV File to Landing",
+               "type": "Copy",
+               "dependsOn": [
+                {
+                 "activity": "Record File In Progress",
+                 "dependencyConditions": [
+                  "Succeeded"
+                 ]
+                }
+               ],
+               "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 1,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+               },
+               "userProperties": [],
+               "typeProperties": {
+                "source": {
+                 "type": "BinarySource",
+                 "storeSettings": {
+                  "type": "AzureBlobFSReadSettings",
+                  "recursive": false,
+                  "deleteFilesAfterCompletion": false
+                 },
+                 "formatSettings": {
+                  "type": "BinaryReadSettings"
+                 }
+                },
+                "sink": {
+                 "type": "BinarySink",
+                 "storeSettings": {
+                  "type": "AzureBlobFSWriteSettings"
+                 }
+                },
+                "enableStaging": false
+               },
+               "inputs": [
+                {
+                 "referenceName": "DS_Csv_Binary_File",
+                 "type": "DatasetReference",
+                 "parameters": {
+                  "folder": {
+                   "value": "@activity('Read Table Details').output.firstRow.source_path",
+                   "type": "Expression"
+                  },
+                  "container": "source",
+                  "fileName": {
+                   "value": "@item().name",
+                   "type": "Expression"
+                  }
+                 }
+                }
+               ],
+               "outputs": [
+                {
+                 "referenceName": "DS_Csv_Binary_File",
+                 "type": "DatasetReference",
+                 "parameters": {
+                  "folder": {
+                   "value": "@concat(activity('Read Table Details').output.firstRow.source_system,'/',activity('Read Table Details').output.firstRow.source_table_name,'/',variables('start_time'))",
+                   "type": "Expression"
+                  },
+                  "container": "landing",
+                  "fileName": {
+                   "value": "@item().name",
+                   "type": "Expression"
+                  }
+                 }
+                }
+               ]
+              },
+              {
+               "name": "Mark File Copied",
+               "type": "Script",
+               "dependsOn": [
+                {
+                 "activity": "Copy CSV File to Landing",
+                 "dependencyConditions": [
+                  "Succeeded"
+                 ]
+                }
+               ],
+               "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 2,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+               },
+               "userProperties": [],
+               "linkedServiceName": {
+                "referenceName": "LS_AzureSqlDatabase",
+                "type": "LinkedServiceReference"
+               },
+               "typeProperties": {
+                "scripts": [
+                 {
+                  "type": "Query",
+                  "text": {
+                   "value": "UPDATE ctrl.file_ingestion_manifest\nSET status = 'COPIED',\n    updated_timestamp = SYSUTCDATETIME(),\n    last_error = NULL\nWHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}'\n  AND adf_run_id = '@{pipeline().parameters.adf_run_id}'\n  AND status = 'IN_PROGRESS'",
+                   "type": "Expression"
+                  }
+                 }
+                ],
+                "scriptBlockExecutionTimeout": "02:00:00"
+               }
+              },
+              {
+               "name": "Mark File Copy Failed",
+               "type": "Script",
+               "dependsOn": [
+                {
+                 "activity": "Copy CSV File to Landing",
+                 "dependencyConditions": [
+                  "Failed"
+                 ]
+                }
+               ],
+               "policy": {
+                "timeout": "0.12:00:00",
+                "retry": 2,
+                "retryIntervalInSeconds": 30,
+                "secureOutput": false,
+                "secureInput": false
+               },
+               "userProperties": [],
+               "linkedServiceName": {
+                "referenceName": "LS_AzureSqlDatabase",
+                "type": "LinkedServiceReference"
+               },
+               "typeProperties": {
+                "scripts": [
+                 {
+                  "type": "Query",
+                  "text": {
+                   "value": "UPDATE ctrl.file_ingestion_manifest\nSET status = 'FAILED',\n    updated_timestamp = SYSUTCDATETIME(),\n    last_error = LEFT(N'@{replace(activity('Copy CSV File to Landing').error.message,'''','''''')}', 2000)\nWHERE table_id = @{pipeline().parameters.table_id}\nAND source_path = N'@{replace(activity('Read Table Details').output.firstRow.source_path,'''','''''')}'\nAND source_file_name = N'@{replace(item().name,'''','''''')}'\nAND source_last_modified = CAST(CONVERT(datetimeoffset(7), '@{activity('Read Current File Metadata').output.lastModified}') AS datetime2(7))\nAND source_file_size = @{activity('Read Current File Metadata').output.size}\nAND source_content_md5 = N'@{coalesce(activity('Read Current File Metadata').output.contentMD5,'')}'\n  AND adf_run_id = '@{pipeline().parameters.adf_run_id}'\n  AND status = 'IN_PROGRESS'",
+                   "type": "Expression"
+                  }
+                 }
+                ],
+                "scriptBlockExecutionTimeout": "02:00:00"
+               }
+              },
+              {
+               "name": "Fail CSV File Ingestion",
+               "type": "Fail",
+               "dependsOn": [
+                {
+                 "activity": "Mark File Copy Failed",
+                 "dependencyConditions": [
+                  "Completed"
+                 ]
+                }
+               ],
+               "userProperties": [],
+               "typeProperties": {
+                "message": "CSV file copy failed. The manifest records FAILED; inspect the Copy activity and retry after reconciliation.",
+                "errorCode": "CSV_COPY_FAILED"
+               }
+              }
+             ],
+             "ifFalseActivities": []
+            }
+           }
+          ]
+         }
         }
        ]
       }
