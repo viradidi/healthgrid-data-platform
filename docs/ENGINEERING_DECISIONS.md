@@ -31,7 +31,7 @@ The ctrl.table_config table describes source system, source object or file, land
 - Makes source activation and load strategy configurable without duplicating an entire pipeline for each object.
 - Keeps execution audit and watermark state outside the transformation notebooks.
 
-**Boundary:** Source-to-Silver ingestion is metadata-configured. Gold output targets are registered in metadata, but their joins and analytical SQL are implemented in individual Databricks notebooks. The Gold transformation logic is therefore not fully metadata-driven.
+**How this applies across the layers:** Metadata drives the end-to-end framework, including Gold. The Gold pipeline queries active `SILVER_TO_GOLD` rows from `ctrl.table_config`, iterates over those rows, and constructs the Databricks notebook path from each row's `gold_table_name`. This means the Gold target selection and execution are metadata-driven, just as source-to-Silver ingestion is configured from metadata. The individual analytical transformation SQL remains implemented in the corresponding Gold notebook; metadata selects and orchestrates the configured transformation rather than storing all transformation SQL inside the control table.
 
 ## 4. Load strategies
 
@@ -83,7 +83,7 @@ For MERGE, the notebook validates that merge keys are supplied and exist in the 
 
 ## 8. Gold analytical modeling
 
-**Decision:** Publish three purpose-built Gold datasets rather than exposing raw Silver tables directly to reporting consumers.
+**Decision:** Publish three purpose-built Gold datasets through a metadata-driven Gold orchestration stage rather than exposing raw Silver tables directly to reporting consumers.
 
 - patient_360: patient-level records enriched with hospital and insurance details and pre-aggregated laboratory activity.
 - hospital_daily_summary: hospital/day laboratory volume, distinct patients, doctor counts, abnormal and critical counts and rates, and previous-day comparison.
