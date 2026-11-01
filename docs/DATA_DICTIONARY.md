@@ -155,7 +155,7 @@ Timestamp watermark rows are seeded for PostgreSQL incremental configurations. A
 | end_time | Stage completion time |
 | created_timestamp | Audit record creation time |
 
-The audit table records processing status per configured object and stage, rather than relying only on a single overall pipeline status.
+The audit table records processing status per configured object and stage, rather than relying only on a single overall pipeline status. A unique constraint on `(adf_run_id, table_id, stage)` enforces one summary row per parent run, object, and stage. Start activities use an idempotent upsert; a retry resets the same row to IN_PROGRESS rather than adding another row. This is a latest-attempt summary, while detailed retry history remains in ADF run/activity history.
 
 ### 3.4 ctrl.file_ingestion_manifest
 
