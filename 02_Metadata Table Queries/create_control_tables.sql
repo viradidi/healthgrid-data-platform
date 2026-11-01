@@ -29,7 +29,7 @@ CREATE TABLE ctrl.table_config (
     silver_table_name    VARCHAR(200)  NULL,        -- NULL for gold-stage rows
     gold_table_name      VARCHAR(200)  NULL,
     load_type            VARCHAR(20)   NOT NULL CHECK (load_type IN ('FULL','APPEND','MERGE')),
-    watermark_column     VARCHAR(100)  NULL,        -- required when load_type = APPEND or MERGE
+    watermark_column     VARCHAR(100)  NULL,        -- timestamp extraction field for timestamp-watermarked sources; ADLS CSV uses the file manifest
     merge_keys           VARCHAR(200)  NULL,        -- comma-separated business key(s); required only when load_type = MERGE
     stage                VARCHAR(20)   NOT NULL CHECK (stage IN ('SOURCE_TO_SILVER','SILVER_TO_GOLD')),
     is_active             BIT           NOT NULL DEFAULT 1,
@@ -130,7 +130,7 @@ VALUES
     -- External partner feeds (ADLS CSV)
     ('adls_csv', NULL, 'lab_results', 'csv', 'lab_results',
      'lab_results', 'lab_results', NULL,
-     'APPEND', 'reported_at', NULL, 'SOURCE_TO_SILVER', 1),
+     'APPEND', NULL, NULL, 'SOURCE_TO_SILVER', 1),
 
     ('adls_csv', NULL, 'insurance_providers', 'csv', 'insurance_providers',
      'insurance_providers', 'insurance_providers', NULL,
@@ -139,14 +139,15 @@ GO
 
 /* =====================================================================
    Seed data — ctrl.watermark
-   Initial watermark for the APPEND/MERGE tables only (lab_results, patients),
-   set far in the past so the first run pulls full history.
+   Initial timestamp watermark for PostgreSQL incremental objects (patients).
+   ADLS CSV file selection is controlled by ctrl.file_ingestion_manifest.
    ===================================================================== */
 
 INSERT INTO ctrl.watermark (table_id, watermark_value, last_updated_timestamp)
 SELECT table_id, '1900-01-01T00:00:00', SYSUTCDATETIME()
 FROM ctrl.table_config
-WHERE load_type IN ('APPEND', 'MERGE');
+WHERE source_system = 'neon_postgres'
+  AND load_type IN ('APPEND', 'MERGE');
 GO
 
 
