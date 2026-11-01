@@ -136,6 +136,12 @@ The control framework includes:
 | [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
 
+## Repository validation
+
+The repository includes a [GitHub Actions validation workflow](.github/workflows/healthgrid-validation.yml) that checks exported JSON, Databricks notebook code-cell syntax, Python syntax, required documentation, the preserved architecture-image embed, and selected credential patterns.
+
+These are static repository checks. They do not execute Azure Data Factory pipelines or Databricks workloads.
+
 ## Running and redeploying the project
 
 The project was executed successfully end-to-end in its original Azure environment. That environment and its resource identifiers may differ from a future HealthGrid deployment.
