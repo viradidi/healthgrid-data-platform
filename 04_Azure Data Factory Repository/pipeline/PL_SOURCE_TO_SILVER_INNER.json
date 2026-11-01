@@ -490,11 +490,43 @@
          }
         },
         {
+         "name": "Validate FULL CSV inventory",
+         "type": "IfCondition",
+         "dependsOn": [
+          {
+           "activity": "Filter CSV Files",
+           "dependencyConditions": [
+            "Succeeded"
+           ]
+          }
+         ],
+         "userProperties": [],
+         "typeProperties": {
+          "expression": {
+           "value": "@and(equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),equals(length(activity('Filter CSV Files').output.value),0))",
+           "type": "Expression"
+          },
+          "ifTrueActivities": [
+           {
+            "name": "Fail Empty FULL CSV Source",
+            "type": "Fail",
+            "dependsOn": [],
+            "userProperties": [],
+            "typeProperties": {
+             "message": "FULL CSV source folder contains no CSV files. Verify the configured source path and initial feed before processing.",
+             "errorCode": "FULL_CSV_SOURCE_EMPTY"
+            }
+           }
+          ],
+          "ifFalseActivities": []
+         }
+        },
+        {
          "name": "Ingest New CSV Files",
          "type": "ForEach",
          "dependsOn": [
           {
-           "activity": "Filter CSV Files",
+           "activity": "Validate FULL CSV inventory",
            "dependencyConditions": [
             "Succeeded"
            ]
