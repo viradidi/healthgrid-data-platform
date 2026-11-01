@@ -15,7 +15,7 @@ This is a static review of the committed implementation and documentation. It is
 |---|---|---|
 | PostgreSQL | Source DDL and incremental-load SQL | Hospital, doctor, and patient source entities |
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
-| Control metadata | Control-table DDL and audit SQL | Configuration, PostgreSQL watermarks, per-file manifest, and audit records |
+| Control metadata | Control-table DDL, audit uniqueness migration, and audit SQL | Configuration, PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
 | ADF | Factory, pipelines, datasets, linked services | Orchestration, metadata lookup, audit, and notifications |
 | Databricks ingestion | Landing-to-Bronze notebook | Reads timestamped landing batches into Bronze; schema-drift and same-batch replay guards |
@@ -63,7 +63,8 @@ The master pipeline was updated so Gold requires both source branches to be Succ
 - Landing-to-Bronze appends batches and blocks exact landing-timestamp replay. The CSV branch now tracks file versions through `ctrl.file_ingestion_manifest`; unresolved prior-run IN_PROGRESS/COPIED states require reconciliation. Revised whole-file snapshots can still duplicate rows under APPEND.
 - Silver MERGE validates configured key-column presence, but duplicate source keys and out-of-order versions require explicit tests and handling.
 - PostgreSQL timestamp checkpoint behavior and strict timestamp boundaries need tests for late arrivals, equality, timezone consistency, and failure recovery. CSV source selection is file-manifest-based, with content MD5 optional.
-- Confirm audit updates distinguish retries and multiple attempts within a parent ADF run.
+- Audit rows are unique by `(adf_run_id, table_id, stage)`; source and Gold starts use idempotent HOLDLOCK upserts and finalizers scope updates by stage. Retries update the single summary record; ADF history preserves individual attempt details.
+- Existing control databases require `migrate_audit_log_unique_key.sql`. It fails safely when duplicate historical keys exist and leaves reconciliation to an operator.
 
 ### Gold publication and recovery
 
