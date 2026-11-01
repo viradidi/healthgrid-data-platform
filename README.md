@@ -64,9 +64,9 @@ The control metadata seeds five source objects:
 | ADLS CSV | `lab_results` | APPEND | External laboratory result feed |
 | ADLS CSV | `insurance_providers` | FULL | Insurance provider reference data |
 
-The source-to-Silver framework uses the `ctrl.table_config` metadata to select active source objects and their configured load strategy. For incremental objects, `ctrl.watermark` stores the current watermark value. The ADF pipeline records execution status and row counts in `ctrl.audit_log`.
+The source-to-Silver framework uses `ctrl.table_config` to select active source objects and their configured load strategy. PostgreSQL timestamp-incremental extraction uses `ctrl.watermark`. ADLS CSV ingestion uses `ctrl.file_ingestion_manifest`, which identifies individual file versions and tracks them through copy and Bronze-to-Silver processing. The ADF pipeline records execution status and row counts in `ctrl.audit_log`.
 
-The watermark approach is based on the configured source watermark column. It is not a substitute for CDC: its correctness depends on source timestamps being maintained reliably and on the chosen watermark semantics being appropriate for the source.
+The PostgreSQL watermark approach is not a substitute for CDC: its correctness depends on source timestamps being maintained reliably and on the chosen watermark semantics being appropriate for the source. CSV selection is based on file metadata, not the `reported_at` business event-time column.
 
 ## Medallion data layers
 
