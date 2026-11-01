@@ -167,7 +167,7 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 
 ## 9. Known limitations and operational safeguards
 
-- **Master dependencies:** Gold is triggered after source branches are Completed, not explicitly Succeeded. Validate upstream outcomes; consider changing dependencies to Succeeded after reviewing failure propagation.
+- **Master dependencies:** Gold requires both source branches to be Succeeded. The notification branch intentionally uses Completed after Gold so it can report either outcome. Validate this behavior in the deployed factory with failure-injection tests.
 - **Watermark calculation:** checkpoint uses current UTC time rather than the maximum source timestamp processed. Test late arrivals and source clock differences.
 - **Strict watermark predicate:** equal-timestamp changes and precision boundaries need explicit handling.
 - **APPEND replay:** landing and Silver append paths are not inherently deduplicated by batch identity.
