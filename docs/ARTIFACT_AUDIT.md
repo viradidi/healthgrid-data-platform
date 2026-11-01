@@ -74,7 +74,9 @@ Map CareSync catalog, Volume, workspace, and notebook path references to one tar
 
 ### CI/CD
 
-The reviewed repository inventory did not establish a dedicated GitHub Actions workflow for ADF JSON validation, notebook checks, secret scanning, Markdown link checks, or release packaging. Do not claim CI is passing without an inspected workflow run. Static checks would not execute ADF or Databricks workloads.
+A GitHub Actions workflow now exists at .github/workflows/healthgrid-validation.yml. It validates JSON syntax, notebook code-cell syntax, Python syntax, required documentation files, the exact README architecture-image embed, and selected high-confidence credential patterns.
+
+The workflow was committed as a repository change, but its first GitHub Actions run has not yet been independently verified in this audit. Do not claim the checks are passing until the run completes successfully. These static checks do not execute ADF pipelines or Databricks workloads.
 
 ## Architecture preservation
 
