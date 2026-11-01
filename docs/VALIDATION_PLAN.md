@@ -44,7 +44,9 @@ These tests require execution in a configured Azure environment. Static inspecti
 | ADF-02 | PostgreSQL MERGE extraction | Insert and update patient records with valid updated_at values | Expected new/changed records reach landing |
 | ADF-03 | CSV initial ingestion | Run initial lab-results and insurance-provider feeds | Expected files reach the correct timestamped landing paths |
 | ADF-04 | CSV incremental selection | Add a new eligible file and run again | Only files satisfying configured modified-time selection are copied |
-| ADF-05 | Landing path construction | Inspect ADF sink path and notebook parameters | Source system, object, and timestamp identify the same batch |
+| ADF-05 | Landing path construction | Inspect ADF sink path and notebook parameters | Source system, metadata object, 24-hour millisecond timestamp, and ADF run ID identify the same batch |
+| ADF-09 | PostgreSQL schema metadata | Set source_schema_name to a non-default schema in a disposable source | Copy query reads the configured schema rather than a hardcoded schema |
+| ADF-10 | Copy returns no rows/files | Test a PostgreSQL query returning zero rows and an ADLS source with no eligible files | A successful empty Copy reaches explicit no-data handling; a Copy-level no-file failure is surfaced distinctly and does not become a false SUCCESS |
 | ADF-06 | Source connection failure | Use unavailable endpoint or invalid test credential | Failure is visible; downstream does not treat missing data as a successful empty batch |
 | ADF-07 | Source branch failure | Force one source branch to fail | Failure is identifiable; Gold is not accepted solely because master continued |
 | ADF-08 | Concurrent execution | Trigger overlapping runs for the same source | No landing collision, checkpoint race, or unintended overwrite |
@@ -61,11 +63,13 @@ These tests require execution in a configured Azure environment. Static inspecti
 | BRZ-04 | Multiple batches | Land two batches for one object | Each batch remains identifiable by landing timestamp |
 | BRZ-05 | Missing landing directory | Invoke notebook with non-existent batch path and accessible source/table parents | Incremental load returns `NO_DATA`; FULL load fails; no Bronze rows are written |
 | BRZ-06 | Empty landing directory | Invoke notebook with existing empty path for FULL and incremental configurations | FULL fails safely; incremental returns `NO_DATA`; no empty batch is appended to Bronze |
-| BRZ-07 | Replay same batch | Process same landing batch twice | Duplicate behavior is measured; replay is blocked or made safe before production |
+| BRZ-07 | Replay same batch | Process the same landing timestamp twice | Second Bronze append is rejected before mutation when that batch already exists |
+| BRZ-10 | Schema drift | Add/remove a field or change a field type after the Bronze schema is established | Bronze append fails with a clear drift report before target mutation; reviewed migration is required |
+| BRZ-11 | New-run replay | Re-run source extraction so the same source records land under a new ADF run ID | Test demonstrates that batch-ID protection alone does not deduplicate the same business records across newly identified batches; apply the intended APPEND deduplication/manifest policy |
 | BRZ-08 | Schema drift | Add, remove, or change a source field | Drift is detected or handled by explicit policy; no silent incorrect coercion |
 | BRZ-09 | ADF no-data status propagation | Run an incremental source that produces no landing records | Landing-to-Bronze returns `NO_DATA`; ADF passes that status to Silver; Silver exits with zero rows; checkpoint remains unchanged; audit records SUCCESS with zero rows |
 
-The current Landing-to-Bronze notebook appends rows and adds batch/insert timestamps. It does not establish a unique batch key or deduplicate replayed batches. BRZ-07 is a key reliability test.
+The current Landing-to-Bronze notebook appends rows and adds batch/insert timestamps. It rejects exact same-timestamp batch replay and fails closed on Bronze schema drift. It does not deduplicate identical source records re-extracted into a new batch ID; BRZ-11 remains a key reliability test. Schema validation is static code evidence until run in Databricks.
 
 ## 6. Silver transformation tests
 
