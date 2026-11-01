@@ -46,6 +46,7 @@ These tests require execution in a configured Azure environment. Static inspecti
 | ADF-04 | CSV incremental selection | Add a new file version and run again | Only file versions not already marked PROCESSED in the manifest are copied |
 | ADF-05 | Landing path construction | Inspect ADF sink path and notebook parameters | Source system, metadata object, 24-hour millisecond timestamp, and ADF run ID identify the same batch |
 | ADF-09 | PostgreSQL schema metadata | Set source_schema_name to a non-default schema in a disposable source | Copy query reads the configured schema rather than a hardcoded schema |
+| ADF-10 | Empty incremental PostgreSQL extraction | Use a watermark beyond all available source rows | Confirm ADF Copy behavior; Landing returns NO_DATA where no file is produced, Silver and watermark stay unchanged, and the run records a successful zero-row outcome |
 | ADF-10 | Copy returns no rows/files | Test a PostgreSQL query returning zero rows and an ADLS source with no eligible files | A successful empty Copy reaches explicit no-data handling; a Copy-level no-file failure is surfaced distinctly and does not become a false SUCCESS |
 | ADF-06 | Source connection failure | Use unavailable endpoint or invalid test credential | Failure is visible; downstream does not treat missing data as a successful empty batch |
 | ADF-07 | Source branch failure | Force one source branch to fail | Failure is identifiable; Gold is not accepted solely because master continued |
