@@ -49,7 +49,7 @@ These tests require execution in a configured Azure environment. Static inspecti
 | ADF-07 | Source branch failure | Force one source branch to fail | Failure is identifiable; Gold is not accepted solely because master continued |
 | ADF-08 | Concurrent execution | Trigger overlapping runs for the same source | No landing collision, checkpoint race, or unintended overwrite |
 
-**Orchestration gate:** the current master pipeline uses Completed dependencies before starting Gold, rather than explicitly requiring Succeeded. Validate behavior when either source branch fails. Consider gating Gold on successful upstream outcomes or an explicit quality gate.
+**Orchestration gate:** the master pipeline now requires both source branches to be Succeeded before starting Gold. Test each source branch failing independently and verify Gold is skipped. The notification branch intentionally runs after Gold is Completed so it can report success or failure.
 
 ## 5. Landing and Bronze tests
 
