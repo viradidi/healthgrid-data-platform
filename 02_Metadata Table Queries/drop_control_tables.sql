@@ -5,6 +5,10 @@
    Run this before re-running create_control_tables.sql.
    ===================================================================== */
 
+IF OBJECT_ID('ctrl.file_ingestion_manifest', 'U') IS NOT NULL
+    DROP TABLE ctrl.file_ingestion_manifest;
+GO
+
 IF OBJECT_ID('ctrl.audit_log', 'U') IS NOT NULL
     DROP TABLE ctrl.audit_log;
 GO
