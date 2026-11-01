@@ -67,11 +67,30 @@ jobs:
           for path in notebook_files:
               try:
                   notebook = json.loads(path.read_text(encoding="utf-8"))
+                  metadata = notebook.get("metadata", {})
+                  databricks_metadata = metadata.get("application/vnd.databricks.v1+notebook", {})
+                  notebook_language = (
+                      metadata.get("language_info", {}).get("name")
+                      or databricks_metadata.get("language")
+                      or "python"
+                  ).lower()
+
                   for index, cell in enumerate(notebook.get("cells", [])):
-                      if cell.get("cell_type") == "code":
-                          source = cell.get("source", [])
-                          source = "".join(source) if isinstance(source, list) else source
+                      if cell.get("cell_type") != "code":
+                          continue
+                      source = cell.get("source", [])
+                      source = "".join(source) if isinstance(source, list) else source
+                      if not source.strip():
+                          errors.append(f"Empty code cell: {path}:cell-{index}")
+                          continue
+                      if notebook_language == "sql":
+                          # SQL notebooks are validated as notebook JSON here;
+                          # their SQL must be executed/validated in Databricks.
+                          continue
+                      if notebook_language == "python":
                           compile(source, f"{path}:cell-{index}", "exec")
+                      else:
+                          errors.append(f"Unsupported notebook language '{notebook_language}': {path}")
               except Exception as exc:
                   errors.append(f"Invalid notebook or code cell: {path}: {exc}")
 
