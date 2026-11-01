@@ -109,7 +109,7 @@ The calendar provides date keys, day/week/month/quarter/year attributes, period 
 
 The control framework records table-level stage status, ADF run ID, record count, start time, and end time. A separate notification pipeline reads audit records and posts a status payload to a Logic Apps endpoint.
 
-**Operational consideration:** The exported master pipeline uses Completed dependencies to start Gold after both source branches finish, and to start notification after Gold finishes. A completed activity can have succeeded, failed, or been skipped status. Validate that the intended failure-propagation and notification behavior is preserved in the deployed factory; do not assume that completion alone means all upstream work succeeded.
+**Operational consideration:** The master pipeline requires both source branches to be Succeeded before starting Gold. The notification branch uses Completed after Gold so it can run after either Gold success or failure. Validate this failure-propagation and notification behavior in the deployed factory; a completed notification activity alone does not prove that upstream processing succeeded.
 
 ## 11. Security and data scope
 
