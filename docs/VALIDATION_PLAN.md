@@ -59,10 +59,11 @@ These tests require execution in a configured Azure environment. Static inspecti
 | BRZ-02 | CSV landing read | Land CSV fixture and execute Landing-to-Bronze | Header handling and types are correct; rows reconcile |
 | BRZ-03 | Ingestion metadata | Inspect Bronze rows | Every row has expected landing_timestamp and populated insert_timestamp |
 | BRZ-04 | Multiple batches | Land two batches for one object | Each batch remains identifiable by landing timestamp |
-| BRZ-05 | Missing landing directory | Invoke notebook with non-existent batch path | Clear exit; no Bronze rows written |
-| BRZ-06 | Empty landing directory | Invoke notebook with existing empty path | Empty input is explicit and cannot be mistaken for a successful non-empty batch |
+| BRZ-05 | Missing landing directory | Invoke notebook with non-existent batch path and accessible source/table parents | Incremental load returns `NO_DATA`; FULL load fails; no Bronze rows are written |
+| BRZ-06 | Empty landing directory | Invoke notebook with existing empty path for FULL and incremental configurations | FULL fails safely; incremental returns `NO_DATA`; no empty batch is appended to Bronze |
 | BRZ-07 | Replay same batch | Process same landing batch twice | Duplicate behavior is measured; replay is blocked or made safe before production |
 | BRZ-08 | Schema drift | Add, remove, or change a source field | Drift is detected or handled by explicit policy; no silent incorrect coercion |
+| BRZ-09 | ADF no-data status propagation | Run an incremental source that produces no landing records | Landing-to-Bronze returns `NO_DATA`; ADF passes that status to Silver; Silver exits with zero rows; checkpoint remains unchanged; audit records SUCCESS with zero rows |
 
 The current Landing-to-Bronze notebook appends rows and adds batch/insert timestamps. It does not establish a unique batch key or deduplicate replayed batches. BRZ-07 is a key reliability test.
 
@@ -74,7 +75,7 @@ The current Landing-to-Bronze notebook appends rows and adds batch/insert timest
 |---|---|---|---|
 | SLV-01 | Initial FULL load | Load known source snapshot | Silver contains the expected complete snapshot |
 | SLV-02 | FULL overwrite | Change fixture and run FULL again | Silver reflects new snapshot and does not retain obsolete rows |
-| SLV-03 | Empty FULL batch | Supply valid empty batch | Overwrite is explicitly approved; unexpected empty input cannot erase valid target |
+| SLV-03 | Empty FULL batch | Supply an empty or missing FULL landing batch | Landing-to-Bronze fails before Bronze-to-Silver; existing Silver target is not overwritten |
 
 ### APPEND strategy
 
@@ -83,7 +84,7 @@ The current Landing-to-Bronze notebook appends rows and adds batch/insert timest
 | SLV-04 | Initial APPEND | Load known lab-results batch | Silver increases by expected row count |
 | SLV-05 | Second APPEND | Load disjoint second batch | Existing rows remain and new rows are added |
 | SLV-06 | Duplicate replay | Reprocess same batch | Duplicates are detected; replay policy prevents or explicitly tolerates them |
-| SLV-07 | Empty APPEND | Process valid empty batch | Existing Silver rows remain unchanged |
+| SLV-07 | Empty APPEND | Process valid empty batch | Silver write is skipped; existing Silver rows and watermark remain unchanged |
 
 ### MERGE strategy
 
@@ -97,6 +98,7 @@ The current Landing-to-Bronze notebook appends rows and adds batch/insert timest
 | SLV-13 | Null merge key | Supply null patient_id | Invalid row is rejected/quarantined |
 | SLV-14 | Late/out-of-order update | Process older source version after newer target version | Older data cannot overwrite newer data, or limitation is explicitly accepted |
 | SLV-15 | Missing merge-key column | Remove patient_id from fixture | Notebook fails before target mutation |
+| SLV-16 | Empty MERGE batch | Process an incremental batch with no records | Silver write is skipped; existing target remains unchanged; checkpoint is not advanced |
 
 The current MERGE notebook checks that configured key columns exist, but does not itself prove source-key uniqueness or compare source versions against target versions. SLV-12 and SLV-14 are explicit hardening gates.
 
@@ -105,9 +107,9 @@ The current MERGE notebook checks that configured key columns exist, but does no
 | ID | Scenario | Test procedure | Acceptance criteria |
 |---|---|---|---|
 | WMR-01 | Initial checkpoint | Run incremental object with seeded historical watermark | Expected initial history is selected |
-| WMR-02 | Successful checkpoint | Complete extraction and Silver processing | Checkpoint update occurs only after required processing succeeds |
+| WMR-02 | Successful checkpoint | Complete extraction and Silver processing | Checkpoint update occurs only after required processing succeeds; success audit waits for checkpoint activity success |
 | WMR-03 | Failed Silver write | Force Silver notebook failure | Watermark does not advance |
-| WMR-04 | Failed checkpoint update | Allow Silver write, then fail checkpoint activity | Target/checkpoint discrepancy is observable and recoverable |
+| WMR-04 | Failed checkpoint update | Allow Silver write, then fail checkpoint activity | Target/checkpoint discrepancy is observable and recoverable; success audit is not written and parent failure handling records FAILED |
 | WMR-05 | Equal timestamp boundary | Create source change at exact stored checkpoint | No eligible change is silently skipped |
 | WMR-06 | Late-arriving update | Add update with older source timestamp after later checkpoint | Defined lookback/CDC policy captures it, or limitation is accepted |
 | WMR-07 | Clock/time-zone difference | Use source and orchestration timestamps with known offsets | Comparisons use consistent documented time basis |
@@ -122,9 +124,9 @@ The current MERGE notebook checks that configured key columns exist, but does no
 | ID | Scenario | Test procedure | Acceptance criteria |
 |---|---|---|---|
 | AUD-01 | Start audit | Start table-stage execution | IN_PROGRESS record is associated with expected ADF run and table |
-| AUD-02 | Success audit | Complete notebook and success activity | SUCCESS, end time, and records_written reflect execution |
+| AUD-02 | Success audit | Complete notebook, checkpoint control (or valid FULL/no-data skip), and success activity | SUCCESS, end time, and records_written reflect execution; incremental no-data is SUCCESS with zero rows |
 | AUD-03 | Failure audit | Force upstream notebook/activity failure | FAILED status identifies table and stage |
-| AUD-04 | Audit update failure | Fail audit update after data write | Data success and audit failure are distinguishable |
+| AUD-04 | Audit update failure | Fail audit update after data write and checkpoint success | Data/checkpoint success and audit failure are distinguishable |
 | AUD-05 | Stale IN_PROGRESS | Simulate interrupted run | Stale execution is discoverable and reconcilable to ADF history |
 | AUD-06 | Multiple runs | Execute same table in separate ADF runs | Audit records associate with correct run |
 
