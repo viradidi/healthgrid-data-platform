@@ -96,7 +96,7 @@ Three Gold notebooks create curated datasets from the Silver layer:
 | `hospital_daily_summary` | Daily hospital laboratory volumes, unique patients, doctor counts, abnormal and critical results, and trend measures |
 | `lab_test_trends` | Monthly laboratory test volumes, abnormal and critical counts, rates, and month-over-month changes |
 
-The Gold transformations are implemented in their respective Databricks notebooks. The control metadata identifies the Gold targets and enables orchestration, while the analytical SQL logic itself is notebook-defined.
+**All layers are metadata-driven.** Active metadata configures source-to-Silver processing and selects the Gold outputs to execute. The Gold pipeline reads active `SILVER_TO_GOLD` records from `ctrl.table_config` and resolves each Databricks notebook path from `gold_table_name`. Dataset-specific analytical transformation logic remains implemented in the corresponding notebooks.
 
 ## Orchestration and operational controls
 
@@ -124,6 +124,17 @@ The control framework includes:
 | [Azure Data Factory exports](<04_Azure%20Data%20Factory%20Repository/>) | Factory, linked services, datasets, and pipeline JSON |
 | [Databricks notebooks](<05_Databricks_Repository/>) | Landing, Bronze-to-Silver, calendar, and Gold transformations |
 | [Architecture diagram](assets/architecture-overview.png) | Original HealthGrid architecture image |
+
+## Engineering and operations documentation
+
+| Document | Purpose |
+|---|---|
+| [Engineering decisions](docs/ENGINEERING_DECISIONS.md) | Architecture choices, metadata-driven design, trade-offs, and implementation boundaries |
+| [Data dictionary](docs/DATA_DICTIONARY.md) | Source entities, control tables, layer responsibilities, and Gold dataset grain |
+| [Operations runbook](docs/OPERATIONS_RUNBOOK.md) | Monitoring, audit interpretation, checkpoint operations, troubleshooting, and recovery |
+| [Validation plan](docs/VALIDATION_PLAN.md) | Repeatable tests, measurable acceptance criteria, and release gates |
+| [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
+| [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
 
 ## Running and redeploying the project
 
