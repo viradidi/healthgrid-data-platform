@@ -108,7 +108,7 @@ The control framework includes:
 - Source object, file format, path, target table, load type, watermark column, and merge-key metadata.
 - Timestamp watermark state for PostgreSQL incremental sources.
 - `ctrl.file_ingestion_manifest` for ADLS CSV file-version identity and replay control.
-- Audit records with ADF run ID, processing stage, status, row count, and timestamps.
+- Audit records with ADF run ID, processing stage, status, row count, and timestamps; uniqueness is enforced per parent run/table/stage, with idempotent retry upserts.
 - Per-file CSV states: IN_PROGRESS, COPIED, PROCESSED, and FAILED; file versions are finalized only after Bronze-to-Silver succeeds.
 - Success/failure status updates around notebook execution.
 - A notification pipeline that assembles run status information for a Logic Apps endpoint.
@@ -121,7 +121,7 @@ The control framework includes:
 |---|---|
 | [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Source table creation, seed data, and sample incremental changes |
 | [ADLS CSV source data](<01_Sources%20Data/02_adls_csv/>) | Initial and incremental partner feed samples |
-| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, CSV file manifest, and audit table setup |
+| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, CSV file manifest, audit setup, and safe audit-key migration |
 | [Gold STTM workbook](<03_Gold%20STTM/sttm_silver_to_gold.xlsx>) | Source-to-target mapping for analytical outputs |
 | [Azure Data Factory exports](<04_Azure%20Data%20Factory%20Repository/>) | Factory, linked services, datasets, and pipeline JSON |
 | [Databricks notebooks](<05_Databricks_Repository/>) | Landing, Bronze-to-Silver, calendar, and Gold transformations |
