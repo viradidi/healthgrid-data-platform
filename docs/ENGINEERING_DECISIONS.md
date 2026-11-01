@@ -95,9 +95,9 @@ ADF lists direct child items in the configured source folder, filters CSV files,
 
 **Decision:** Use a shared Databricks notebook to apply FULL, APPEND, or MERGE behavior to configured Silver tables.
 
-For MERGE, the notebook validates that merge keys are supplied and exist in the incoming DataFrame before building the Delta MERGE statement.
+For MERGE, ADF passes the configured `watermark_column` as the source-version field. The shared notebook requires that field to be a DATE or TIMESTAMP, rejects null business keys, duplicate source keys, null source versions, invalid target keys, and source/target schema mismatches before mutation. It does not silently choose a winner when multiple source rows share a business key.
 
-**Trade-off:** The merge updates matched records using the incoming batch. The current implementation does not define a source-version comparison or deterministic tie-breaker for multiple incoming rows with the same business key. Source deduplication and ordering should be established where feeds can contain repeated keys.
+Matched rows are updated only when the incoming source version is strictly newer than the target version. Equal-version rows with identical business payloads are treated as safe replays; equal-version rows with changed business payloads fail for reconciliation. Older source versions are counted and skipped. The current MERGE configuration is the PostgreSQL `patients` object, using `patient_id` as the business key and `updated_at` as the source version.
 
 ## 9. Gold analytical modeling
 
