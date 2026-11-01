@@ -202,7 +202,7 @@
     "userProperties": [],
     "typeProperties": {
      "expression": {
-      "value": "@not(equals(activity('Read Table Details').output.firstRow.load_type,'FULL' ))",
+      "value": "@and(equals(activity('Read Table Details').output.firstRow.source_system,'neon_postgres'),not(equals(activity('Read Table Details').output.firstRow.load_type,'FULL')))",
       "type": "Expression"
      },
      "ifTrueActivities": [
@@ -311,7 +311,7 @@
     "userProperties": [],
     "typeProperties": {
      "expression": {
-      "value": "@and(not(equals(activity('Read Table Details').output.firstRow.load_type,'FULL')),not(equals(activity('Landing to Bronze').output.runOutput,'NO_DATA')))",
+      "value": "@and(equals(activity('Read Table Details').output.firstRow.source_system,'neon_postgres'),not(equals(activity('Read Table Details').output.firstRow.load_type,'FULL')),not(equals(activity('Landing to Bronze').output.runOutput,'NO_DATA')))",
       "type": "Expression"
      },
      "ifTrueActivities": [
