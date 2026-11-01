@@ -253,6 +253,8 @@ jobs:
                       )
                       if f"stage = '{stage}'" not in failure_sql:
                           errors.append(f"{stage} failure audit update is not stage-scoped.")
+                      if "IF @@ROWCOUNT <> 1" not in failure_sql:
+                          errors.append(f"{stage} failure audit update must fail if exactly one row was not updated.")
 
               source_success = find_activity(inner_pipeline, "Update Success Status")
               gold_success = find_activity(gold_pipeline, "Update Success Status")
@@ -269,6 +271,8 @@ jobs:
                   )
                   if f"stage = '{stage}'" not in success_sql:
                       errors.append(f"{stage} success audit update is not stage-scoped.")
+                  if "IF @@ROWCOUNT <> 1" not in success_sql:
+                      errors.append(f"{stage} success audit update must fail if exactly one row was not updated.")
           except Exception as exc:
               errors.append(f"Repository contract validation failed: {exc}")
 
