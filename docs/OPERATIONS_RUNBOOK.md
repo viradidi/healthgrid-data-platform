@@ -95,7 +95,11 @@ The source is extracted without a watermark predicate. Silver uses overwrite mod
 For the ADLS CSV lab-results feed, the file manifest selects new file versions and Silver appends the corresponding batch. `reported_at` is a business event-time field, not the ADF file-selection checkpoint. Exact processed file versions are skipped, but a changed whole-file snapshot is a new version and can reappend rows that existed in the prior version. The feed should be immutable/additive or have a row-level deduplication policy.
 
 ### MERGE
-For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at` and `patient_id`. Validate that the incoming batch has one deterministic row per merge key. The current notebook updates matched rows without comparing source-version timestamps to target versions.
+For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at` and `patient_id`; ADF passes the metadata `watermark_column` into the Silver notebook as its source-version field.
+
+Before mutation, the notebook rejects null or duplicate source keys, null source versions, null/duplicate target keys, null target versions, and source/target schema mismatches. Matched rows update only when the incoming version is newer. Older versions are skipped and counted. Equal-version rows with unchanged business values are no-ops; equal-version rows with changed business values fail.
+
+**Recovery:** Do not bypass a failed MERGE validation by deleting or deduplicating rows automatically. Inspect the source batch and target rows for the reported keys, identify the authoritative source version, correct/reconcile the underlying records, and rerun the affected table through the normal pipeline. If the target contains duplicate keys or schema drift, use a reviewed repair or migration before restarting. The ADF watermark should not be advanced manually until the corrected batch has reached Silver.
 
 ### Checkpoint caution
 For timestamp-watermarked PostgreSQL sources, the exported inner pipeline advances the watermark to `SYSUTCDATETIME()` after the Bronze-to-Silver notebook succeeds. It does not calculate the maximum source timestamp actually observed in the batch. Source extraction uses a strict greater-than predicate. ADLS CSV feeds do not use `ctrl.watermark`; their selection state is stored in `ctrl.file_ingestion_manifest`.
