@@ -43,7 +43,7 @@ These tests require execution in a configured Azure environment. Static inspecti
 | ADF-01 | PostgreSQL FULL | Run hospitals and doctors as FULL | Extracted rows reconcile to source snapshot |
 | ADF-02 | PostgreSQL MERGE extraction | Insert and update patient records with valid updated_at values | Expected new/changed records reach landing |
 | ADF-03 | CSV initial ingestion | Run initial lab-results and insurance-provider feeds | Expected files reach the correct timestamped landing paths |
-| ADF-04 | CSV incremental selection | Add a new eligible file and run again | Only files satisfying configured modified-time selection are copied |
+| ADF-04 | CSV incremental selection | Add a new file version and run again | Only file versions not already marked PROCESSED in the manifest are copied |
 | ADF-05 | Landing path construction | Inspect ADF sink path and notebook parameters | Source system, metadata object, 24-hour millisecond timestamp, and ADF run ID identify the same batch |
 | ADF-09 | PostgreSQL schema metadata | Set source_schema_name to a non-default schema in a disposable source | Copy query reads the configured schema rather than a hardcoded schema |
 | ADF-10 | Copy returns no rows/files | Test a PostgreSQL query returning zero rows and an ADLS source with no eligible files | A successful empty Copy reaches explicit no-data handling; a Copy-level no-file failure is surfaced distinctly and does not become a false SUCCESS |
@@ -53,6 +53,25 @@ These tests require execution in a configured Azure environment. Static inspecti
 
 **Orchestration gate:** the master pipeline now requires both source branches to be Succeeded before starting Gold. Test each source branch failing independently and verify Gold is skipped. The notification branch intentionally runs after Gold is Completed so it can report success or failure.
 
+## 5A. CSV file manifest tests
+
+| ID | Scenario | Test procedure | Acceptance criteria |
+|---|---|---|---|
+| FILE-01 | Folder enumeration | Run Get Metadata against a populated source folder | Direct child items are returned; only file items with a .csv extension enter the ForEach |
+| FILE-02 | File identity | Inspect manifest values for a source file | Identity contains table_id, source path/name, lastModified, size, and content MD5 where available |
+| FILE-03 | Processed file skip | Run the same source inventory after a version reaches PROCESSED | Exact file version is not copied again |
+| FILE-04 | Changed file version | Replace a file with changed lastModified, size, or content MD5 | New version is treated as a new delivery and is copied once |
+| FILE-05 | Copy state transition | Allow file Copy to succeed | Manifest moves IN_PROGRESS to COPIED; it is not yet PROCESSED |
+| FILE-06 | End-to-end state transition | Complete Landing-to-Bronze and Bronze-to-Silver | All COPIED files for the table/run become PROCESSED |
+| FILE-07 | Copy failure | Force a per-file Copy failure | Manifest records FAILED and failure remains visible in ADF |
+| FILE-08 | Downstream failure after Copy | Copy succeeds, then fail Landing-to-Bronze or Silver | Manifest remains COPIED; next run blocks automatic recopy until original landing batch is reconciled |
+| FILE-09 | Empty source folder | Use an existing folder with no CSV files | Zero file iterations; incremental load records NO_DATA/zero rows; FULL fails closed |
+| FILE-10 | Missing or inaccessible folder | Remove folder or revoke list permission | Get Metadata fails visibly; it is not misclassified as an empty feed |
+| FILE-11 | Concurrent same-file runs | Start two runs for the same file version | Unique manifest identity and state checks prevent silent duplicate copy; conflicting run fails closed |
+| FILE-12 | Missing content MD5 | Use a file for which Get Metadata returns no contentMD5 | Manifest falls back to path/name/lastModified/size; limitation is recorded |
+| FILE-13 | Mutable full-file delivery | Replace an already processed CSV with a revised whole-file snapshot | APPEND duplication risk is demonstrated and a source immutability or row-level deduplication policy is required |
+
+The manifest state machine is a conservative file-level replay guard. It does not make ADLS Copy, Delta writes, and Azure SQL manifest updates one atomic transaction. A COPIED state after downstream failure must be reconciled rather than automatically retried.
 ## 5. Landing and Bronze tests
 
 | ID | Scenario | Test procedure | Acceptance criteria |
@@ -121,7 +140,7 @@ The current MERGE notebook checks that configured key columns exist, but does no
 | WMR-09 | Per-object isolation | Process two incremental objects | One object's checkpoint does not alter the other's |
 | WMR-10 | Checkpoint recovery | Restore verified prior checkpoint in disposable environment | Backfill reconciles without silent loss or uncontrolled duplication |
 
-**Critical implementation-specific test:** the current ADF pipeline advances watermark to SYSUTCDATETIME(), rather than the maximum source timestamp actually observed. Test the extraction/checkpoint interval, late arrivals, and source clock behavior before relying on this design for production completeness.
+**Critical implementation-specific test:** the current ADF pipeline advances the PostgreSQL timestamp watermark to SYSUTCDATETIME(), rather than the maximum source timestamp actually observed. Test the extraction/checkpoint interval, late arrivals, and source clock behavior before relying on this design for production completeness. ADLS CSV selection is manifest-based and does not use `ctrl.watermark`.
 
 ## 8. Audit and failure-path tests
 
