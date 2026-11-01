@@ -84,7 +84,7 @@ ORDER BY updated_timestamp DESC;
 | FAILED audit row | Failure handler recorded a failed activity | Inspect original error and recovery point |
 | Databricks notebook output | Notebook result, often processed row count | Reconcile against target data |
 
-The audit table is not a complete event log. Retain ADF activity output, Databricks run output, source/target counts, and checkpoint evidence as supporting records.
+The audit table uses `(adf_run_id, table_id, stage)` as its natural key: one record per configured object and stage in a parent ADF run. Source and Gold ForEach loops upsert `IN_PROGRESS` with `MERGE ... WITH (HOLDLOCK)`, so a retry reinitializes the same run-stage record. Success/failure updates include the stage predicate. This is a latest-attempt summary for that parent run, not an attempt-by-attempt event history. Retain ADF activity output, Databricks run output, source/target counts, and checkpoint evidence as supporting records.
 
 ## 5. Load strategies and watermark handling
 
@@ -141,7 +141,7 @@ Check source system, table name, landing timestamp, file format, landing content
 Check the selected Bronze batch, target schema, configured load type, and merge keys. For MERGE, inspect null and duplicate keys. Determine whether the Silver write committed before a later activity failed. Reconcile the target before retrying.
 
 ### Watermark or audit update failure
-The success-audit activity runs only after file-manifest finalization and the watermark-control activity succeed. For PostgreSQL, if data was written but the watermark update failed, the success audit is not written; the parent failure handler should mark the table run FAILED. For CSV, inspect COPIED/PROCESSED manifest rows and the original landing batch before retrying. Inspect the target and processed interval before any checkpoint or manifest repair. APPEND replay may duplicate rows; MERGE replay may overwrite newer values if source ordering is not controlled. If the audit update itself fails after the checkpoint succeeds, validate data and checkpoint before repairing audit metadata.
+The success-audit activity runs only after file-manifest finalization and the watermark-control activity succeed. Audit rows are unique by parent run, table, and stage; the upsert resets an existing row to IN_PROGRESS on retry, and status updates are stage-scoped. For PostgreSQL, if data was written but the watermark update failed, the success audit is not written; the parent failure handler should mark the table run FAILED. For CSV, inspect COPIED/PROCESSED manifest rows and the original landing batch before retrying. Inspect the target and processed interval before any checkpoint or manifest repair. APPEND replay may duplicate rows; MERGE replay may overwrite newer values if source ordering is not controlled. If the audit update itself fails after the checkpoint succeeds, validate data and checkpoint before repairing audit metadata.
 
 ### Gold notebook failure
 Identify the failed Gold metadata row and notebook path. Confirm required Silver inputs, catalog/schema permissions, and target state. Gold notebooks use `CREATE OR REPLACE TABLE`; inspect the target after a failed rebuild rather than assuming the prior output remains intact. Rerun only after confirming the full-rebuild behavior is acceptable.
@@ -191,6 +191,8 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 
 ## 9. Known limitations and operational safeguards
 
+- **Audit identity:** one row is retained per `(adf_run_id, table_id, stage)`. Retries reset that row to IN_PROGRESS; the design does not preserve a separate history row for every retry attempt. Use ADF run/activity history for attempt-level detail.
+- **Audit migration:** on an existing control database, pause pipelines and run `migrate_audit_log_unique_key.sql`. It fails safely if duplicate natural keys already exist; reconcile duplicates manually and rerun. Do not delete audit history automatically.
 - **Master dependencies:** Gold requires both source branches to be Succeeded. The notification branch intentionally uses Completed after Gold so it can report either outcome. Validate this behavior in the deployed factory with failure-injection tests.
 - **Watermark calculation:** checkpoint uses current UTC time rather than the maximum source timestamp processed. Test late arrivals and source clock differences.
 - **Strict watermark predicate:** equal-timestamp changes and precision boundaries need explicit handling.
