@@ -125,15 +125,23 @@ The calendar provides date keys, day/week/month/quarter/year attributes, period 
 
 ## 11. Audit and notification controls
 
-The control framework records table-level stage status, ADF run ID, record count, start time, and end time. A separate notification pipeline reads audit records and posts a status payload to a Logic Apps endpoint.
+The control framework records table-level stage status, ADF run ID, record count, start time, and end time. The natural audit key is `(adf_run_id, table_id, stage)`. A unique constraint enforces one summary row per parent run/object/stage, and `MERGE ... WITH (HOLDLOCK)` makes IN_PROGRESS creation idempotent for retry. Final updates are stage-scoped. This table summarizes the latest attempt; ADF run/activity history retains individual attempt details. A separate notification pipeline reads audit records and posts a status payload to a Logic Apps endpoint.
 
 **Operational consideration:** The master pipeline requires both source branches to be Succeeded before starting Gold. The notification branch uses Completed after Gold so it can run after either Gold success or failure. Validate this failure-propagation and notification behavior in the deployed factory; a completed notification activity alone does not prove that upstream processing succeeded.
 
-## 12. Security and data scope
+## 12. Audit record identity and retry semantics
+
+**Decision:** Use `(adf_run_id, table_id, stage)` as the audit natural key.
+
+Source-to-Silver and Silver-to-Gold table loops use an idempotent `MERGE ... WITH (HOLDLOCK)` to create or reset the single IN_PROGRESS summary row. Success and failure updates include the stage predicate so a source-stage update cannot alter the Gold-stage record for the same table and parent run.
+
+**Trade-off:** The audit table retains the latest attempt summary for that key, not one row per retry. Detailed attempt-level history remains in ADF execution history. For existing control databases, apply `migrate_audit_log_unique_key.sql` while pipelines are paused. The migration stops if historical duplicate natural keys exist and does not delete or merge audit records automatically.
+
+## 13. Security and data scope
 
 The checked-in data is synthetic and the project is educational. Credentials should be supplied through secure linked-service configuration and Azure Key Vault references, not committed in source control. Any real-world adaptation would require privacy, access-control, retention, encryption, audit, and regulatory controls appropriate to the jurisdiction and data classification.
 
-## 13. Deployment and operational decisions
+## 14. Deployment and operational decisions
 
 - Treat source-table DDL containing DROP statements as a controlled initialization/reset script, not a non-destructive migration.
 - Configure environment-specific storage, catalog, schema, notebook, linked-service, and notification references together.
@@ -141,7 +149,7 @@ The checked-in data is synthetic and the project is educational. Credentials sho
 - Run the validation plan and reconcile source, Bronze, Silver, Gold, and audit counts after redeployment.
 - Keep the project status accurate: it was successfully executed end-to-end in its original environment, even if cost-saving cleanup means that environment is no longer active.
 
-## 14. Interview discussion prompts
+## 15. Interview discussion prompts
 
 1. Why use metadata-configured ingestion, and which parts of the platform remain code-defined?
 2. What guarantees does a timestamp watermark provide, and where can it miss changes?
