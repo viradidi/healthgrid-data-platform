@@ -290,7 +290,7 @@ The previous-month comparison is based on the previous available monthly row for
 
 ## 9. Operational and interpretation notes
 
-- Watermark values are stored as text in ctrl.watermark; source timestamp formats and comparisons must remain consistent.
+- PostgreSQL watermark values are stored as text in `ctrl.watermark`; source timestamp formats and comparisons must remain consistent. CSV delivery state is tracked separately in `ctrl.file_ingestion_manifest`.
 - The configured patient MERGE key is patient_id; the source update timestamp is used for incremental selection.
 - APPEND feeds need a clear duplicate-delivery and replay policy.
 - The current source extraction pattern is watermark-based, not full change-data capture.
