@@ -138,6 +138,10 @@
       "landing_status": {
        "value": "@activity('Landing to Bronze').output.runOutput",
        "type": "Expression"
+      },
+      "source_version_column": {
+       "value": "@coalesce(activity('Read Table Details').output.firstRow.watermark_column,'')",
+       "type": "Expression"
       }
      }
     },
