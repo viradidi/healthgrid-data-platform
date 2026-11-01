@@ -195,6 +195,38 @@ jobs:
               if 'source_system == "adls_csv"' not in landing_source or 'dbutils.notebook.exit("NO_DATA")' not in landing_source:
                   errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
 
+              # Static contract checks for null-safe, version-aware Silver MERGE behavior.
+              silver_notebook_path = Path("05_Databricks_Repository/Bronze_to_Silver.ipynb")
+              silver_notebook = json.loads(silver_notebook_path.read_text(encoding="utf-8"))
+              silver_source = "\\n".join(
+                  "".join(cell.get("source", []))
+                  for cell in silver_notebook.get("cells", [])
+                  if cell.get("cell_type") == "code"
+              )
+              bronze_to_silver = by_name.get("Bronze to Silver", {})
+              silver_parameters = bronze_to_silver.get("typeProperties", {}).get("baseParameters", {})
+              expected_version_parameter = "@coalesce(activity('Read Table Details').output.firstRow.watermark_column,'')"
+              if silver_parameters.get("source_version_column", {}).get("value") != expected_version_parameter:
+                  errors.append("ADF must pass table_config.watermark_column to the Silver MERGE source-version widget.")
+              required_silver_contracts = {
+                  "source-version widget": 'dbutils.widgets.text("source_version_column", "")',
+                  "timestamp/date version validation": "TimestampType, DateType",
+                  "null-key rejection": "null_key_condition",
+                  "duplicate source-key rejection": "duplicate_source_keys",
+                  "duplicate target-key rejection": "duplicate_target_keys",
+                  "null source-version rejection": "null_version_count",
+                  "equal-version conflict detection": "equal_version_conflicts",
+                  "stale-version monitoring": "stale_source_count",
+                  "strictly newer update predicate": "WHEN MATCHED AND source.",
+              }
+              for label, required in required_silver_contracts.items():
+                  if required not in silver_source:
+                      errors.append(f"Silver MERGE contract is missing {label}.")
+              if "> target." not in silver_source:
+                  errors.append("Silver MERGE must update matched rows only when the incoming source version is newer.")
+              if "target schema does not match" not in silver_source.lower():
+                  errors.append("Silver MERGE must fail closed when source and target schemas differ.")
+
               # Audit natural-key and idempotent retry contract across both table loops.
               main_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_MAIN.json")
               inner_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
