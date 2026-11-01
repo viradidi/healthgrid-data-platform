@@ -140,7 +140,7 @@
          {
           "type": "Query",
           "text": {
-           "value": "UPDATE ctrl.audit_log\nSET status = 'FAILED',\n    end_time = SYSUTCDATETIME()\nWHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'\n  AND table_id = @{item().table_id}\n  AND stage = 'SOURCE_TO_SILVER';",
+           "value": "UPDATE ctrl.audit_log\nSET status = 'FAILED',\n    end_time = SYSUTCDATETIME()\nWHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'\n  AND table_id = @{item().table_id}\n  AND stage = 'SOURCE_TO_SILVER';\n\nIF @@ROWCOUNT <> 1\n    THROW 51020, 'Expected exactly one SOURCE_TO_SILVER audit row to be updated for this parent run and table.', 1;\n",
            "type": "Expression"
           }
          }
