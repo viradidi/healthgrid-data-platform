@@ -13,7 +13,7 @@ The ADF master pipeline, `PL_MASTER`, coordinates:
 3. Metadata-driven Silver-to-Gold execution.
 4. Email notification.
 
-The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks.
+The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a watermark for APPEND/MERGE loads, copies data to a timestamped ADLS landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An empty FULL batch fails before Silver can overwrite its target; an empty incremental batch skips Silver writes and watermark advancement, then records a successful zero-row outcome.
 
 Gold orchestration reads active `SILVER_TO_GOLD` rows from `ctrl.table_config` and dynamically resolves each notebook from `gold_table_name`. All layers are metadata-driven; dataset-specific transformation logic resides in the corresponding Databricks notebooks.
 
@@ -108,7 +108,7 @@ Do not move a checkpoint forward simply to clear a failure. If the correct bound
 Inspect the failing linked service and activity. Verify network/firewall access, source availability, credentials, Key Vault references, and permissions. Never place credentials in logs or repository files. Rerun only after connectivity is confirmed.
 
 ### Missing files or landing path
-Inspect the Copy activity, source folder, sink folder, generated landing timestamp, and notebook parameters. Confirm the expected files exist. The Landing-to-Bronze notebook exits when the timestamped path is missing; do not interpret that exit alone as a valid empty batch. Never proceed with a FULL Silver overwrite until the intended batch is verified.
+Inspect the Copy activity, source folder, sink folder, generated landing timestamp, and notebook parameters. The Landing-to-Bronze notebook requires the source/table parent paths to be accessible and returns `NO_DATA` only for a missing/empty batch landing path or a zero-row extract on an incremental load. A FULL load with no data fails before Silver is called. ADF Copy can itself fail before the notebook when its source file selection finds no files; diagnose that separately rather than treating every Copy failure as `NO_DATA`. Do not manually relabel a failed Copy as an empty successful batch.
 
 ### Landing-to-Bronze failure
 Check source system, table name, landing timestamp, file format, landing contents, volume access, and Bronze permissions. Reconcile Bronze rows for that timestamp before retrying. The notebook appends to Bronze, so replaying a batch already written can duplicate it.
@@ -117,7 +117,7 @@ Check source system, table name, landing timestamp, file format, landing content
 Check the selected Bronze batch, target schema, configured load type, and merge keys. For MERGE, inspect null and duplicate keys. Determine whether the Silver write committed before a later activity failed. Reconcile the target before retrying.
 
 ### Watermark or audit update failure
-Watermark update and success-audit update are separate activities after the Bronze-to-Silver notebook. If data was written but the watermark was not advanced, inspect the target and processed interval before retrying. APPEND replay may duplicate rows; MERGE replay may overwrite newer values if source ordering is not controlled. If the watermark advanced but audit update failed, validate data and checkpoint before repairing audit metadata.
+The success-audit activity now depends on the watermark-control activity succeeding. If data was written but the watermark update failed, the success audit is not written; the parent failure handler should mark the table run FAILED. Inspect the target and processed interval before retrying. APPEND replay may duplicate rows; MERGE replay may overwrite newer values if source ordering is not controlled. If the audit update itself fails after the checkpoint succeeds, validate data and checkpoint before repairing audit metadata.
 
 ### Gold notebook failure
 Identify the failed Gold metadata row and notebook path. Confirm required Silver inputs, catalog/schema permissions, and target state. Gold notebooks use `CREATE OR REPLACE TABLE`; inspect the target after a failed rebuild rather than assuming the prior output remains intact. Rerun only after confirming the full-rebuild behavior is acceptable.
@@ -174,7 +174,7 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 - **MERGE source uniqueness:** validate one source row per key and deterministic ordering.
 - **No CDC contract:** hard deletes and late-arriving updates need separate policies.
 - **Gold rebuilds:** Gold notebooks replace their targets rather than incrementally merging changes.
-- **No-file handling:** confirm missing landing paths cannot lead to an unintended empty-batch overwrite.
+- **No-data handling:** empty FULL batches fail before Silver overwrite; empty incremental batches skip Silver and checkpoint updates and are recorded as successful with zero rows. ADF Copy no-file errors still need their own source-branch diagnosis and runtime test.
 - **Parallel processing:** ForEach activities run in parallel. Check for duplicate target configurations and shared-resource conflicts.
 - **Legacy identifiers:** verify CareSync catalog, volume, and notebook paths in the restored workspace.
 - **Destructive source setup:** the PostgreSQL source creation script drops existing source tables. Treat it as a disposable environment reset, not a production migration.
