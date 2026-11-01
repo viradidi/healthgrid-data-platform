@@ -1,0 +1,39 @@
+{
+  "name": "DS_Csv_Binary_File",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_ADLS",
+      "type": "LinkedServiceReference"
+    },
+    "parameters": {
+      "folder": {
+        "type": "string"
+      },
+      "container": {
+        "type": "string"
+      },
+      "fileName": {
+        "type": "string"
+      }
+    },
+    "annotations": [],
+    "type": "Binary",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "folderPath": {
+          "value": "@dataset().folder",
+          "type": "Expression"
+        },
+        "fileName": {
+          "value": "@dataset().fileName",
+          "type": "Expression"
+        },
+        "fileSystem": {
+          "value": "@dataset().container",
+          "type": "Expression"
+        }
+      }
+    }
+  }
+}
