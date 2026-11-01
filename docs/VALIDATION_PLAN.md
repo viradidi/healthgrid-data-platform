@@ -154,8 +154,13 @@ The current MERGE notebook checks that configured key columns exist, but does no
 | AUD-04 | Audit update failure | Fail audit update after data write and checkpoint success | Data/checkpoint success and audit failure are distinguishable |
 | AUD-05 | Stale IN_PROGRESS | Simulate interrupted run | Stale execution is discoverable and reconcilable to ADF history |
 | AUD-06 | Multiple runs | Execute same table in separate ADF runs | Audit records associate with correct run |
+| AUD-07 | Idempotent audit retry | Start the same table/stage twice using the same parent ADF run ID | One row exists for the natural key; the second start resets status to IN_PROGRESS and clears prior result fields |
+| AUD-08 | Stage-scoped updates | Use the same parent run and table ID for SOURCE_TO_SILVER and SILVER_TO_GOLD | Updating one stage does not change the other stage's audit row |
+| AUD-09 | Unique-key enforcement | Attempt to create duplicate `(adf_run_id, table_id, stage)` rows | Unique key rejects the duplicate |
+| AUD-10 | Existing-history migration precheck | Run migration against a disposable audit table containing duplicate natural keys | Migration stops before creating the unique index and does not delete historical rows |
+| AUD-11 | Concurrent upsert | Simulate two attempts to create the same run/table/stage key | HOLDLOCK plus unique index leaves exactly one audit row; losing attempt is surfaced for reconciliation |
 
-Check whether the current audit update predicate, using adf_run_id and table_id, can match multiple rows if a table is retried within one parent run. If so, introduce a unique execution identifier or target the specific audit row.
+The audit implementation now uses `(adf_run_id, table_id, stage)` as its natural key. Start activities use a `MERGE ... WITH (HOLDLOCK)` upsert, and status updates include the stage. This deliberately retains the latest attempt summary per table/stage/parent run; ADF execution history remains the source for per-attempt detail.
 
 ## 9. Gold analytical validation
 
