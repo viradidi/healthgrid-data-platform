@@ -194,8 +194,83 @@ jobs:
               )
               if 'source_system == "adls_csv"' not in landing_source or 'dbutils.notebook.exit("NO_DATA")' not in landing_source:
                   errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
+
+              # Audit natural-key and idempotent retry contract across both table loops.
+              main_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_MAIN.json")
+              inner_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
+              gold_path = Path("04_Azure Data Factory Repository/pipeline/PL_SILVER_TO_GOLD.json")
+              audit_migration_path = Path("02_Metadata Table Queries/migrate_audit_log_unique_key.sql")
+              main_pipeline = json.loads(main_path.read_text(encoding="utf-8"))
+              inner_pipeline = json.loads(inner_path.read_text(encoding="utf-8"))
+              gold_pipeline = json.loads(gold_path.read_text(encoding="utf-8"))
+              audit_migration = audit_migration_path.read_text(encoding="utf-8")
+
+              def walk_activities(activities):
+                  for activity in activities or []:
+                      yield activity
+                      props = activity.get("typeProperties", {})
+                      yield from walk_activities(props.get("activities", []))
+                      yield from walk_activities(props.get("ifTrueActivities", []))
+                      yield from walk_activities(props.get("ifFalseActivities", []))
+                      for case in props.get("cases", []):
+                          yield from walk_activities(case.get("activities", []))
+
+              def find_activity(document, name):
+                  return next(
+                      (activity for activity in walk_activities(document["properties"]["activities"])
+                       if activity.get("name") == name),
+                      None
+                  )
+
+              audit_ddl = control_sql
+              if "UQ_audit_log_run_table_stage UNIQUE (adf_run_id, table_id, stage)" not in audit_ddl:
+                  errors.append("Fresh control-table DDL must enforce the run/table/stage audit natural key.")
+              if "UQ_audit_log_run_table_stage" not in audit_migration or "HAVING COUNT(*) > 1" not in audit_migration:
+                  errors.append("Existing-database audit migration must precheck duplicate natural keys before creating its unique index.")
+
+              expected_audit_pipelines = [
+                  (main_pipeline, "SOURCE_TO_SILVER"),
+                  (gold_pipeline, "SILVER_TO_GOLD"),
+              ]
+              for document, stage in expected_audit_pipelines:
+                  start = find_activity(document, "Insert In Progress Status")
+                  failed = find_activity(document, "Update Fialed Status")
+                  if not start:
+                      errors.append(f"{stage} pipeline is missing its audit start activity.")
+                      continue
+                  start_sql = "\\n".join(
+                      script.get("text", {}).get("value", "")
+                      for script in start.get("typeProperties", {}).get("scripts", [])
+                  )
+                  if "MERGE ctrl.audit_log WITH (HOLDLOCK)" not in start_sql or f"'{stage}' AS stage" not in start_sql:
+                      errors.append(f"{stage} audit start must use a HOLDLOCK upsert with its stage key.")
+                  if not failed:
+                      errors.append(f"{stage} pipeline is missing its failure audit update.")
+                  else:
+                      failure_sql = "\\n".join(
+                          script.get("text", {}).get("value", "")
+                          for script in failed.get("typeProperties", {}).get("scripts", [])
+                      )
+                      if f"stage = '{stage}'" not in failure_sql:
+                          errors.append(f"{stage} failure audit update is not stage-scoped.")
+
+              source_success = find_activity(inner_pipeline, "Update Success Status")
+              gold_success = find_activity(gold_pipeline, "Update Success Status")
+              for activity, stage in [
+                  (source_success, "SOURCE_TO_SILVER"),
+                  (gold_success, "SILVER_TO_GOLD"),
+              ]:
+                  if not activity:
+                      errors.append(f"Missing {stage} success audit activity.")
+                      continue
+                  success_sql = "\\n".join(
+                      script.get("text", {}).get("value", "")
+                      for script in activity.get("typeProperties", {}).get("scripts", [])
+                  )
+                  if f"stage = '{stage}'" not in success_sql:
+                      errors.append(f"{stage} success audit update is not stage-scoped.")
           except Exception as exc:
-              errors.append(f"CSV manifest contract validation failed: {exc}")
+              errors.append(f"Repository contract validation failed: {exc}")
 
           readme = Path("README.md").read_text(encoding="utf-8") if Path("README.md").exists() else ""
           if "![HealthGrid Data Platform Architecture](assets/architecture-overview.png)" not in readme:
