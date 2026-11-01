@@ -78,7 +78,8 @@ The repository also contains a recipient address in exported factory configurati
 - Provision PostgreSQL and create source tables using the source SQL scripts.
 - Load intended synthetic source fixtures.
 - Provision Azure SQL Database.
-- Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log, and ctrl.file_ingestion_manifest.
+- Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log (including its unique run/table/stage key), and ctrl.file_ingestion_manifest.
+- For an existing control database, pause ADF triggers and run `02_Metadata Table Queries/migrate_audit_log_unique_key.sql`. The migration performs a duplicate precheck and fails without deleting history if duplicates exist.
 - Verify seeded source and Gold metadata rows.
 - Confirm timestamp-watermarked PostgreSQL objects have `ctrl.watermark` rows and inspect the file manifest table for CSV feeds. CSV file selection no longer depends on `ctrl.watermark`.
 
@@ -202,13 +203,13 @@ The current implementation advances incremental watermarks to current UTC time, 
 | Gold metadata | Confirm active targets resolve to valid notebook paths |
 | Gold rebuild | Confirm CREATE OR REPLACE behavior and recovery after failure |
 | Parallelism | Validate ForEach concurrency and prevent overlapping writes |
-| Audit | Ensure audit updates target intended run/table execution |
+| Audit | Verify one unique row per parent run/table/stage, idempotent start upserts, and stage-scoped status updates |
 | Legacy names | Standardize catalog, workspace, Volume, and notebook references coherently |
 
 ## 8. Rollback and recovery
 
 - Pause schedules before repairing a failed deployment.
-- Preserve ADF run history, notebook output, audit rows, and checkpoint values.
+- Preserve ADF run history, notebook output, audit rows, and checkpoint values. Audit rows summarize the latest attempt for each parent run/table/stage; use ADF run/activity history for retry-level detail.
 - Identify the last verified source interval and successful Silver state.
 - Do not advance a watermark to make a failed run appear complete.
 - For CSV feeds, reconcile the file manifest and original landing path before replay; do not automatically recopy unresolved COPIED/IN_PROGRESS versions.
