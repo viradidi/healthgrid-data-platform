@@ -206,7 +206,9 @@ The Bronze layer preserves source-oriented data for downstream processing and tr
 
 **Purpose:** Provide standardized, queryable Delta tables for analytical transformation.
 
-The shared Bronze-to-Silver notebook receives the configured target table, batch timestamp, load type, and merge keys. It applies the configured FULL, APPEND, or MERGE strategy.
+The shared Bronze-to-Silver notebook receives the configured target table, batch timestamp, load type, merge keys, and `watermark_column` as its source-version field. It applies the configured FULL, APPEND, or MERGE strategy.
+
+For MERGE, the notebook rejects null or duplicate source business keys and null source versions before writing. Existing target keys and schema are validated. A matched row is updated only when the incoming DATE/TIMESTAMP version is newer; an older source version is skipped, an identical equal-version replay is a no-op, and an equal-version business-payload conflict fails for reconciliation.
 
 The Silver layer includes the source entities and the reusable calendar dimension.
 
