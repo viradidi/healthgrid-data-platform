@@ -106,12 +106,14 @@ The control framework includes:
 
 - Active/inactive source configuration.
 - Source object, file format, path, target table, load type, watermark column, and merge-key metadata.
-- Per-table watermark state for incremental sources.
+- Timestamp watermark state for PostgreSQL incremental sources.
+- `ctrl.file_ingestion_manifest` for ADLS CSV file-version identity and replay control.
 - Audit records with ADF run ID, processing stage, status, row count, and timestamps.
+- Per-file CSV states: IN_PROGRESS, COPIED, PROCESSED, and FAILED; file versions are finalized only after Bronze-to-Silver succeeds.
 - Success/failure status updates around notebook execution.
 - A notification pipeline that assembles run status information for a Logic Apps endpoint.
 
-**Operational consideration:** the exported master pipeline currently uses `Completed` dependencies between the source branches and the Gold branch. Before redeploying or scheduling the pipeline in a new environment, validate that upstream failures are propagated and that Gold processing is prevented when required source loads have failed.
+**Orchestration gate:** the master pipeline starts Silver-to-Gold only when both source branches have `Succeeded`. The notification branch runs after Gold is `Completed` so it can report either outcome. The CSV manifest blocks automatic recopy of file versions left in an unresolved prior-run state.
 
 ## Repository guide
 
@@ -119,7 +121,7 @@ The control framework includes:
 |---|---|
 | [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Source table creation, seed data, and sample incremental changes |
 | [ADLS CSV source data](<01_Sources%20Data/02_adls_csv/>) | Initial and incremental partner feed samples |
-| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Control, watermark, and audit table setup and sample records |
+| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, CSV file manifest, and audit table setup |
 | [Gold STTM workbook](<03_Gold%20STTM/sttm_silver_to_gold.xlsx>) | Source-to-target mapping for analytical outputs |
 | [Azure Data Factory exports](<04_Azure%20Data%20Factory%20Repository/>) | Factory, linked services, datasets, and pipeline JSON |
 | [Databricks notebooks](<05_Databricks_Repository/>) | Landing, Bronze-to-Silver, calendar, and Gold transformations |
@@ -135,6 +137,7 @@ The control framework includes:
 | [Validation plan](docs/VALIDATION_PLAN.md) | Repeatable tests, measurable acceptance criteria, and release gates |
 | [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
+| [CSV file ingestion manifest](docs/FILE_INGESTION_MANIFEST.md) | Per-file identity, manifest states, replay protection, and recovery procedure |
 
 ## Repository validation
 
@@ -151,7 +154,7 @@ A redeployment should follow this high-level sequence:
 1. Provision the PostgreSQL source, Azure SQL control database, ADLS Gen2 storage, Azure Databricks workspace, and Azure Data Factory.
 2. Configure linked services and credentials through secure deployment configuration and Azure Key Vault.
 3. Create the source tables and load the supplied synthetic source data.
-4. Create and seed the control metadata tables.
+4. Create and seed the control metadata tables, including the file-ingestion manifest.
 5. Configure the landing paths, Databricks catalog and schemas, notebook paths, and ADF references for the target environment.
 6. Publish the ADF factory and pipeline assets.
 7. Run the master pipeline and verify the source-to-Silver and Silver-to-Gold audit records.
@@ -167,10 +170,10 @@ This is an educational demonstration built with synthetic data. It is not a clin
 
 ## Engineering scope and known considerations
 
-- Source-to-Silver ingestion is metadata-configured; Gold transformation SQL is defined in the individual notebooks.
+- Source-to-Silver ingestion is metadata-configured; ADLS CSV uses a per-file manifest, while PostgreSQL incremental extraction uses timestamp watermarks. Gold transformation SQL is defined in the individual notebooks.
 - Timestamp watermarks rely on source update semantics and should be assessed for late-arriving changes, deletes, and timestamp collisions.
 - The MERGE strategy depends on correctly configured business keys and appropriate source deduplication.
-- The master pipeline's `Completed` dependency behavior should be reviewed for failure propagation before production scheduling.
+- The master pipeline gates Gold on successful source branches; its notification branch runs after Gold completes.
 - The source setup SQL is destructive and should be treated as an initialization/reset script.
 - Environment-specific catalog, workspace, notebook, storage, and integration references must be parameterized or updated during redeployment.
 
