@@ -15,10 +15,11 @@ This is a static review of the committed implementation and documentation. It is
 |---|---|---|
 | PostgreSQL | Source DDL and incremental-load SQL | Hospital, doctor, and patient source entities |
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
-| Control metadata | Control-table DDL and audit SQL | Configuration, watermarks, and audit records |
+| Control metadata | Control-table DDL and audit SQL | Configuration, PostgreSQL watermarks, per-file manifest, and audit records |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
 | ADF | Factory, pipelines, datasets, linked services | Orchestration, metadata lookup, audit, and notifications |
-| Databricks ingestion | Landing-to-Bronze notebook | Reads timestamped landing batches into Bronze |
+| Databricks ingestion | Landing-to-Bronze notebook | Reads timestamped landing batches into Bronze; schema-drift and same-batch replay guards |
+| CSV file manifest | `ctrl.file_ingestion_manifest` and ADF per-file Copy loop | Tracks source file versions through IN_PROGRESS, COPIED, PROCESSED, and FAILED states |
 | Databricks transformation | Bronze-to-Silver notebook | Applies configured FULL, APPEND, and MERGE strategies |
 | Calendar | Calendar preparation notebook | Reusable date dimension |
 | Gold | Patient 360, hospital daily summary, lab test trends notebooks | Dataset-specific analytical transformations |
@@ -59,9 +60,9 @@ The master pipeline was updated so Gold requires both source branches to be Succ
 
 ### Replay and checkpoint guarantees
 
-- Landing-to-Bronze appends batches; replay can duplicate records without batch-level deduplication or a defined replay policy.
+- Landing-to-Bronze appends batches and blocks exact landing-timestamp replay. The CSV branch now tracks file versions through `ctrl.file_ingestion_manifest`; unresolved prior-run IN_PROGRESS/COPIED states require reconciliation. Revised whole-file snapshots can still duplicate rows under APPEND.
 - Silver MERGE validates configured key-column presence, but duplicate source keys and out-of-order versions require explicit tests and handling.
-- Incremental checkpoint behavior and strict timestamp boundaries need tests for late arrivals, equality at the checkpoint, timezone consistency, and failure recovery.
+- PostgreSQL timestamp checkpoint behavior and strict timestamp boundaries need tests for late arrivals, equality, timezone consistency, and failure recovery. CSV source selection is file-manifest-based, with content MD5 optional.
 - Confirm audit updates distinguish retries and multiple attempts within a parent ADF run.
 
 ### Gold publication and recovery
@@ -76,7 +77,7 @@ Map CareSync catalog, Volume, workspace, and notebook path references to one tar
 
 A GitHub Actions workflow now exists at .github/workflows/healthgrid-validation.yml. It validates JSON syntax, notebook code-cell syntax, Python syntax, required documentation files, the exact README architecture-image embed, and selected high-confidence credential patterns.
 
-The workflow was committed as a repository change, but its first GitHub Actions run has not yet been independently verified in this audit. Do not claim the checks are passing until the run completes successfully. These static checks do not execute ADF pipelines or Databricks workloads.
+The repository validation workflow has passed recent GitHub Actions runs, including JSON validation, Python notebook-cell syntax, SQL notebook language recognition, required documentation, architecture-image embed, and selected credential-pattern checks. These static checks do not execute ADF pipelines or Databricks workloads.
 
 ## Architecture preservation
 
