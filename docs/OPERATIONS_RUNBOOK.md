@@ -64,7 +64,7 @@ ORDER BY created_timestamp DESC;
 7. Inspect each Gold notebook result and validate the resulting tables.
 8. Review notification outcome and record exceptions.
 
-**Important orchestration caveat:** the exported master pipeline starts Silver-to-Gold when both source branches are `Completed`, not explicitly `Succeeded`. Therefore, a completed master run does not by itself prove that both source branches succeeded. Check branch and table-level outcomes before accepting Gold outputs.
+**Orchestration gate:** the master pipeline now starts Silver-to-Gold only when both source branches have `Succeeded`. The email notification remains dependent on Gold being `Completed`, so notification can still run after a Gold success or failure. A successful parent run and table-level audit/data checks are still required before accepting outputs.
 
 ## 4. Monitoring and audit interpretation
 
