@@ -78,9 +78,9 @@ The repository also contains a recipient address in exported factory configurati
 - Provision PostgreSQL and create source tables using the source SQL scripts.
 - Load intended synthetic source fixtures.
 - Provision Azure SQL Database.
-- Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, and ctrl.audit_log.
+- Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log, and ctrl.file_ingestion_manifest.
 - Verify seeded source and Gold metadata rows.
-- Confirm APPEND and MERGE objects have watermark rows.
+- Confirm timestamp-watermarked PostgreSQL objects have `ctrl.watermark` rows and inspect the file manifest table for CSV feeds. CSV file selection no longer depends on `ctrl.watermark`.
 
 Review setup scripts before execution; do not run destructive reset/drop scripts against valuable data.
 
@@ -194,6 +194,7 @@ The current implementation advances incremental watermarks to current UTC time, 
 | Source schema | Confirm source tables and watermark columns match metadata |
 | Metadata | Confirm active table IDs, load types, keys, and stages |
 | Landing paths | Confirm ADF output paths match Databricks Volume paths |
+| CSV manifest | Verify per-file metadata identity, status lifecycle, bootstrap, and recovery of COPIED/IN_PROGRESS rows |
 | Bronze replay | Test duplicate behavior before retrying an already-landed batch |
 | Silver MERGE | Test duplicate/null keys and out-of-order updates |
 | Watermarks | Confirm checkpoint advancement and failure recovery |
@@ -210,7 +211,8 @@ The current implementation advances incremental watermarks to current UTC time, 
 - Preserve ADF run history, notebook output, audit rows, and checkpoint values.
 - Identify the last verified source interval and successful Silver state.
 - Do not advance a watermark to make a failed run appear complete.
-- For APPEND, check whether the batch has already been written before replaying.
+- For CSV feeds, reconcile the file manifest and original landing path before replay; do not automatically recopy unresolved COPIED/IN_PROGRESS versions.
+- For other APPEND, check whether the batch has already been written before replaying.
 - For MERGE, confirm source ordering and target state before replaying.
 - For FULL, confirm a complete source snapshot before overwriting.
 - For Gold, inspect the target after a failed CREATE OR REPLACE operation and rebuild only after confirming input completeness.
