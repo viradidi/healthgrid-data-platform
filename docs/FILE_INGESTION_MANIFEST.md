@@ -45,7 +45,7 @@ The dataset `DS_Csv_Binary_File` is parameterized with folder, container, and fi
 
 ## Empty folders and no-data behavior
 
-If the configured source folder exists but contains no eligible CSV files, the Filter/ForEach path has zero file iterations. Landing-to-Bronze then returns `NO_DATA` for an incremental load; a FULL load fails closed rather than overwriting Silver with an empty batch.
+If the configured source folder exists but contains no eligible CSV files, the Filter/ForEach path has zero file iterations. A FULL source fails the explicit inventory check; an incremental source reaches `NO_DATA`. If eligible files exist but every file version is already `PROCESSED`, a FULL CSV run is a successful no-op and does not overwrite Silver. A copied, zero-row file still fails the FULL notebook check.
 
 A missing or inaccessible source folder is not treated as an empty feed: Get Metadata fails so that a path or permission problem remains visible.
 
