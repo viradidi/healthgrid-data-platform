@@ -20,7 +20,7 @@ This is a static review of the committed implementation and documentation. It is
 | ADF | Factory, pipelines, datasets, linked services | Orchestration, metadata lookup, audit, and notifications |
 | Databricks ingestion | Landing-to-Bronze notebook | Reads timestamped landing batches into Bronze; schema-drift and same-batch replay guards |
 | CSV file manifest | `ctrl.file_ingestion_manifest` and ADF per-file Copy loop | Tracks source file versions through IN_PROGRESS, COPIED, PROCESSED, and FAILED states |
-| Databricks transformation | Bronze-to-Silver notebook | Applies configured FULL, APPEND, and MERGE strategies |
+| Databricks transformation | Bronze-to-Silver notebook | Applies configured FULL, APPEND, and version-aware MERGE strategies; validates source/target keys and schema |
 | Calendar | Calendar preparation notebook | Reusable date dimension |
 | Gold | Patient 360, hospital daily summary, lab test trends notebooks | Dataset-specific analytical transformations |
 | Architecture | assets/architecture-overview.png | Original project architecture diagram |
@@ -61,7 +61,7 @@ The master pipeline was updated so Gold requires both source branches to be Succ
 ### Replay and checkpoint guarantees
 
 - Landing-to-Bronze appends batches and blocks exact landing-timestamp replay. The CSV branch now tracks file versions through `ctrl.file_ingestion_manifest`; unresolved prior-run IN_PROGRESS/COPIED states require reconciliation. Revised whole-file snapshots can still duplicate rows under APPEND.
-- Silver MERGE validates configured key-column presence, but duplicate source keys and out-of-order versions require explicit tests and handling.
+- Silver MERGE receives the configured `watermark_column` as its DATE/TIMESTAMP source-version field. It rejects null/duplicate source keys, null source versions, invalid target keys, and schema mismatches; older versions cannot overwrite newer rows, identical equal-version replays are no-ops, and equal-version payload conflicts fail for reconciliation. Runtime data scenarios remain part of the redeployment validation plan.
 - PostgreSQL timestamp checkpoint behavior and strict timestamp boundaries need tests for late arrivals, equality, timezone consistency, and failure recovery. CSV source selection is file-manifest-based, with content MD5 optional.
 - Audit rows are unique by `(adf_run_id, table_id, stage)`; source and Gold starts use idempotent HOLDLOCK upserts and finalizers scope updates by stage. Retries update the single summary record; ADF history preserves individual attempt details.
 - Existing control databases require `migrate_audit_log_unique_key.sql`. It fails safely when duplicate historical keys exist and leaves reconciliation to an operator.
@@ -78,7 +78,7 @@ Map CareSync catalog, Volume, workspace, and notebook path references to one tar
 
 A GitHub Actions workflow now exists at .github/workflows/healthgrid-validation.yml. It validates JSON syntax, notebook code-cell syntax, Python syntax, required documentation files, the exact README architecture-image embed, and selected high-confidence credential patterns.
 
-The repository validation workflow has passed recent GitHub Actions runs, including JSON validation, Python notebook-cell syntax, SQL notebook language recognition, required documentation, architecture-image embed, and selected credential-pattern checks. These static checks do not execute ADF pipelines or Databricks workloads.
+The repository validation workflow has passed recent GitHub Actions runs, including JSON validation, Python notebook-cell syntax, SQL notebook language recognition, required documentation, architecture-image embed, selected credential-pattern checks, and static contracts for the Silver MERGE metadata handoff and version/key safeguards. These static checks do not execute ADF pipelines or Databricks workloads.
 
 ## Architecture preservation
 
