@@ -65,7 +65,9 @@ These tests require execution in a configured Azure environment. Static inspecti
 | FILE-06 | End-to-end state transition | Complete Landing-to-Bronze and Bronze-to-Silver | All COPIED files for the table/run become PROCESSED |
 | FILE-07 | Copy failure | Force a per-file Copy failure | Manifest records FAILED and failure remains visible in ADF |
 | FILE-08 | Downstream failure after Copy | Copy succeeds, then fail Landing-to-Bronze or Silver | Manifest remains COPIED; next run blocks automatic recopy until original landing batch is reconciled |
-| FILE-09 | Empty source folder | Use an existing folder with no CSV files | Zero file iterations; incremental load records NO_DATA/zero rows; FULL fails closed |
+| FILE-09 | Empty source folder | Use an existing folder with no CSV files | Zero file iterations; incremental load records NO_DATA/zero rows; FULL fails its source-inventory check |
+| FILE-14 | FULL feed already processed | Keep one or more CSV files in the source folder, all already marked PROCESSED, then run the FULL feed again | Run succeeds as a no-op; no landing batch or Silver overwrite occurs; audit reports zero rows |
+| FILE-15 | FULL feed contains an empty new file | Add a new empty CSV file version and run the FULL feed | File copies, but zero parsed rows cause Landing-to-Bronze to fail; existing Silver data is not overwritten |
 | FILE-10 | Missing or inaccessible folder | Remove folder or revoke list permission | Get Metadata fails visibly; it is not misclassified as an empty feed |
 | FILE-11 | Concurrent same-file runs | Start two runs for the same file version | Unique manifest identity and state checks prevent silent duplicate copy; conflicting run fails closed |
 | FILE-12 | Missing content MD5 | Use a file for which Get Metadata returns no contentMD5 | Manifest falls back to path/name/lastModified/size; limitation is recorded |
