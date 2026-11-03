@@ -197,3 +197,7 @@ Credentials should be supplied through secure linked-service configuration and A
 ## Decision — audit logical Silver writes, not MERGE input volume
 
 The SOURCE_TO_SILVER audit count represents logical rows written to Silver. FULL/APPEND and initial MERGE table creation use the successfully written input row count. Existing Delta MERGE operations use the operation metrics from the exact tagged commit: inserted plus updated target rows. Source rows skipped because they are stale or equal-version identical do not count as writes. The commit marker is tied to the parent ADF run, target table, and landing batch. This intentionally fails closed when Delta history cannot establish a unique commit and its required metrics; it does not silently substitute the number of Bronze input rows. Runtime validation must confirm these metrics in the restored Azure Databricks workspace.
+
+## Decision — define Gold audit counts as materialized output cardinality
+
+The three Gold models are full rebuilds using `CREATE OR REPLACE TABLE`. Each notebook validates the resulting table's schema, grain, and metric constraints, then returns its final row count. The `SILVER_TO_GOLD` audit stores that count as the number of output rows in the rebuilt dataset. It is not a net insert/update count compared with the previous Gold version. A Gold notebook failure must mark the stage audit FAILED; the explicit pipeline Fail activity is gated on successful completion of that failure-audit update, so the success path does not invoke the failure terminator.
