@@ -181,6 +181,7 @@ The control framework includes:
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
 | [CSV file ingestion manifest](docs/FILE_INGESTION_MANIFEST.md) | Per-file identity, manifest states, replay protection, and recovery procedure |
 | [Source fixture contract](docs/SOURCE_FIXTURE_CONTRACT.md) | PostgreSQL fixture execution order, one-time update guards, CSV snapshot/additive semantics, and expected counts |
+| [ADF source extraction contract](docs/ADF_SOURCE_EXTRACTION_CONTRACT.md) | Metadata validation, PostgreSQL identifier quoting, watermark boundaries, checkpoint behaviour, and landing hand-off |
 | [Notification payload contract](docs/NOTIFICATION_CONTRACT.md) | ADF-to-Logic Apps request fields, status semantics, and external consumer validation |
 
 ## Repository validation
