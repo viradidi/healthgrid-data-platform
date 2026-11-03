@@ -316,7 +316,9 @@ Before each notebook returns its row count, it now checks:
 - Counts are non-negative and do not exceed the corresponding total-test denominator.
 - Rate percentages are between 0 and 100; the abnormal-rate percentage-point change is between -100 and +100.
 
-These checks execute inside Databricks after the table rebuild. They are present in the repository, but require a restored Databricks environment and representative data to obtain runtime pass evidence. Static CI does not execute Spark SQL or these DataFrame assertions.
+Before each `CREATE OR REPLACE TABLE`, the notebooks also validate the inputs used by their joins: dimension/calendar keys must be non-null and unique; non-null source references must resolve; laboratory event IDs must be non-null and unique; event date/test/status fields must be populated; and status labels must be one of the modeled values (`Normal`, `Abnormal`, `Critical`). The hospital model also requires all event dates to be covered by the calendar; the trends model requires all month starts to be covered. This prevents join fan-out and prevents repeated APPEND event IDs from silently inflating Gold metrics.
+
+These checks execute inside Databricks after the table rebuild. They are present in the repository, but require a restored Databricks environment and representative data to obtain runtime pass evidence. Static CI does not execute Spark SQL or these DataFrame assertions. Static CI checks that these preflight contracts remain in the notebook source; it does not execute Spark SQL or the DataFrame assertions.
 
 ## 8. Key relationship and grain rules
 
@@ -344,3 +346,7 @@ These checks execute inside Databricks after the table rebuild. They are present
 ## 10. Naming note
 
 The project was initially called CareSync and was subsequently renamed HealthGrid. The repository's technical artifacts now use HealthGrid naming conventions. During redeployment, replace only the explicit linked-service placeholders and verify that the target workspace contains the documented `/Shared/HealthGrid/` notebooks and `healthgrid` Unity Catalog objects.
+
+## Gold input integrity and APPEND duplicate-event protection
+
+The lab-results feed is loaded with APPEND semantics. A repeated business event delivered under a different file version/batch can therefore exist more than once in Silver even though exact file-version replay is prevented by the manifest. The Gold notebooks now require a non-null, unique `lab_result_id` before rebuilding any output. They also validate result-status categories, required event fields, dimension key uniqueness, and applicable cross-source/calendar references. This is a fail-closed publication guard, not Silver deduplication: operators must reconcile duplicate event IDs in Silver before rerunning Gold.
