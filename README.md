@@ -40,6 +40,23 @@ The architecture diagram above is the original project diagram and is intentiona
 5. **Analytics**
    - Databricks SQL notebooks build the Gold patient, hospital, and laboratory datasets for downstream reporting and analysis.
 
+## Architecture-to-code map
+
+Use this map to move from the architecture diagram to the implementation that realizes each part of the platform.
+
+| Architecture concern | Implementation evidence | What to inspect |
+|---|---|---|
+| End-to-end orchestration | [Master pipeline](<04_Azure Data Factory Repository/pipeline/PL_MASTER.json>) and [source-to-Silver dispatcher](<04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_MAIN.json>) | Separate PostgreSQL and CSV ingestion branches, pipeline dependencies, and the hand-off to Gold processing |
+| Metadata-driven source ingestion | [Source-to-Silver inner pipeline](<04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json>) and [control-table DDL/seeds](<02_Metadata Table Queries/create_control_tables.sql>) | Runtime configuration lookup, source selection, configured load strategies, watermark handling, and audit lifecycle |
+| Metadata-driven Gold orchestration | [Silver-to-Gold pipeline](<04_Azure Data Factory Repository/pipeline/PL_SILVER_TO_GOLD.json>) | Active `SILVER_TO_GOLD` metadata selection and dynamic notebook dispatch using `gold_table_name` |
+| Landing and Bronze processing | [Landing-to-Bronze notebook](<05_Databricks_Repository/Landing_to_Bronze.ipynb>) | Timestamped landing-batch reads, ingestion metadata, and Bronze Delta writes |
+| Reusable Silver processing | [Bronze-to-Silver notebook](<05_Databricks_Repository/Bronze_to_Silver.ipynb>) | Shared FULL, APPEND, and version-aware MERGE processing, including key and source-version validation |
+| Curated Gold analytics | [Patient 360](<05_Databricks_Repository/Gold/NB_patient_360.py>), [hospital daily summary](<05_Databricks_Repository/Gold/NB_hospital_daily_summary.py>), and [lab test trends](<05_Databricks_Repository/Gold/NB_lab_test_trends.py>) | Dataset-specific analytical transformations and output grain |
+| File replay and incremental controls | [Control metadata DDL](<02_Metadata Table Queries/create_control_tables.sql>), [file-manifest design](docs/FILE_INGESTION_MANIFEST.md), [watermark lookback migration](<02_Metadata Table Queries/add_watermark_lookback.sql>), and [patient timestamp-trigger migration](<01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql>) | Per-file replay identity, processing states, bounded timestamp overlap, and source timestamp maintenance |
+| Validation and operational readiness | [Repository CI workflow](.github/workflows/healthgrid-validation.yml), [validation plan](docs/VALIDATION_PLAN.md), and [operations runbook](docs/OPERATIONS_RUNBOOK.md) | Static repository contracts, deferred cloud-runtime tests, monitoring, recovery, and operational checks |
+
+The code map complements the architecture image; it does not replace or modify the original diagram.
+
 ## Technology stack
 
 | Area | Technologies |
