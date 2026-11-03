@@ -20,7 +20,7 @@ This is a static review of the committed implementation and documentation. It is
 | Control metadata | Control-table DDL, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
 | ADF | Factory, pipelines, datasets, linked services | Orchestration, metadata lookup, audit, and notifications |
-| Databricks ingestion | Landing-to-Bronze notebook | Reads timestamped landing batches into Bronze; schema-drift and same-batch replay guards |
+| Databricks ingestion | Landing-to-Bronze notebook | Validates source/batch metadata, reserved columns and case-insensitive schema; blocks exact same-batch replay |
 | CSV file manifest | `ctrl.file_ingestion_manifest` and ADF per-file Copy loop | Tracks source file versions through IN_PROGRESS, COPIED, PROCESSED, and FAILED states |
 | Databricks transformation | Bronze-to-Silver notebook | Fail-closed FULL/APPEND/MERGE routing; version-aware MERGE with source/target key, column-name, and data-type validation |
 | Calendar | Calendar preparation notebook | Reusable date dimension |
