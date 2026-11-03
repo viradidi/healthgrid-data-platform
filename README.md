@@ -1,16 +1,20 @@
 # HealthGrid — Metadata-Driven Healthcare Data Platform
 
-**An end-to-end Azure data engineering platform for integrating healthcare operational data and partner feeds into analytics-ready datasets.**
+**An Azure-based, metadata-driven data platform reference implementation for integrating simulated healthcare operations and partner feeds into analytics-ready datasets.**
 
-HealthGrid is an educational data engineering project built with synthetic healthcare data. It demonstrates how a healthcare network can ingest relational operational data and external partner files, manage ingestion through metadata and audit controls, process data through a Bronze/Silver/Gold architecture, and publish curated analytical outputs.
+HealthGrid models a multi-site healthcare network with PostgreSQL operational tables and external CSV partner feeds. Azure Data Factory orchestrates ingestion and processing, Azure Data Lake Storage Gen2 provides the landing layer, and Azure Databricks transforms the data through Bronze, Silver, and Gold layers. The design emphasizes reusable metadata-driven execution, incremental processing, replay controls, auditability, and business-oriented analytical models.
+
+> **Synthetic-data and intended-use notice:** All patient, clinician, hospital, laboratory-event, and insurance-provider records in this repository are synthetic. Provider names are fictional demo entities, and contact addresses use placeholder `.example` domains. No real patient records, provider relationships, or live clinical integrations are represented. HealthGrid demonstrates data engineering and operational analytics patterns; it is not a clinical product and must not be used to diagnose, treat, triage, or make patient-care decisions.
 
 The platform was originally developed under the name **CareSync** and later renamed **HealthGrid**. CareSync is retained here only as project history; the committed ADF, Databricks, and deployment artifacts now use HealthGrid naming conventions.
 
 ## Business problem
 
-Healthcare networks commonly bring together information from internal hospital systems and external partners. These sources can differ in structure, delivery format, and update frequency. Without reusable ingestion patterns and operational controls, pipelines can become difficult to maintain, monitor, and extend.
+A multi-site healthcare network may need to consolidate administrative data from operational systems with laboratory and insurance-reference feeds delivered by external partners. The sources have different structures, delivery patterns, and update semantics. A robust platform must do more than copy data: it must select work from metadata, preserve batch lineage, handle incremental changes and file re-delivery, expose execution state, and prevent failed upstream processing from being presented as successful analytics.
 
-HealthGrid addresses this integration challenge with configurable source ingestion, centralized control metadata, auditable pipeline execution, layered transformations, and business-oriented Gold datasets.
+HealthGrid demonstrates this engineering response through a shared metadata framework, Azure Data Factory orchestration, controlled Bronze/Silver processing, version-aware MERGE behavior, file-manifest replay protection, audit records, and curated Gold datasets.
+
+The business scenario is intentionally simulated. The project evaluates the data platform and analytical modelling patterns—not clinical workflows or medical outcomes.
 
 ## Architecture
 
@@ -98,6 +102,16 @@ Three Gold notebooks create curated datasets from the Silver layer:
 | `hospital_daily_summary` | Daily hospital laboratory volumes, unique patients, doctor counts, abnormal and critical results, and trend measures |
 | `lab_test_trends` | Monthly laboratory test volumes, abnormal and critical counts, rates, and month-over-month changes |
 
+These models illustrate the kinds of operational questions a data team could support:
+
+| Operational question | Gold output | Analytical purpose |
+|---|---|---|
+| What is the consolidated administrative and laboratory-activity view for a synthetic patient record? | `patient_360` | Combines registration, facility, insurer-reference, and pre-aggregated laboratory activity at patient grain |
+| How does laboratory activity vary across facilities and days? | `hospital_daily_summary` | Compares test volumes, unique patients, active doctors represented in test activity, and result-status mix |
+| Which test categories are increasing or changing in outcome mix over time? | `lab_test_trends` | Tracks monthly test volumes and the distribution of synthetic result-status categories |
+
+The `Abnormal` and `Critical` labels are supplied by the synthetic source fixtures. They are treated as reporting categories only; the platform does not calculate clinical thresholds, diagnose conditions, or recommend treatment.
+
 **All layers are metadata-driven.** Active metadata configures source-to-Silver processing and selects the Gold outputs to execute. The Gold pipeline reads active `SILVER_TO_GOLD` records from `ctrl.table_config` and resolves each Databricks notebook path from `gold_table_name`. Dataset-specific analytical transformation logic remains implemented in the corresponding notebooks.
 
 ## Orchestration and operational controls
@@ -171,7 +185,9 @@ The repository uses the `healthgrid` catalog and `/Volumes/healthgrid/landing/la
 
 ## Data handling and project scope
 
-This is an educational demonstration built with synthetic data. It is not a clinical system, does not process real patient records, and is not intended for medical decision-making. Any real-world adaptation would require appropriate privacy, security, governance, access-control, retention, and regulatory review.
+HealthGrid is a portfolio/reference implementation built with synthetic source records and fictionalized partner-provider names. It contains no real patient information and has no live clinical-system integration. The analytical outputs are designed to demonstrate operational reporting and data-modelling techniques only; they are not intended for diagnosis, triage, treatment, or other patient-care decisions.
+
+A production adaptation would require a separately designed security and privacy architecture, lawful data access, identity and access controls, encryption, retention policies, lineage and audit controls, data-quality ownership, clinical governance where applicable, and jurisdiction-specific regulatory review. Those production controls are not implied by this demonstration.
 
 ## Engineering scope and known considerations
 
