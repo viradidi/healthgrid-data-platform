@@ -79,18 +79,20 @@ The repository also contains a recipient address in exported factory configurati
 
 ### D1 — Provision source and control services
 
-- Provision PostgreSQL and create source tables using the source SQL scripts.
-- Load intended synthetic source fixtures.
-- For an existing PostgreSQL `patients` table, run `01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql` to install the trigger without dropping source data. Fresh installs receive the trigger from `create_source_tables.sql`.
+- Provision a new disposable PostgreSQL source database for the synthetic fixtures. Run `01_Sources Data/01_postgres/create_source_tables.sql` for a fresh source. It creates and seeds `public.hospitals`, `public.doctors`, and `public.patients` only when none already exists; it contains no table-drop operation and fails closed when any target table exists.
+- Load only the intended synthetic source fixtures. Do not use the initial create script as a refresh operation.
+- For an existing PostgreSQL `patients` table, run `01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql`; this migration replaces the trigger definition without dropping patient rows.
 - Verify the PostgreSQL `trg_patients_updated_at_utc` trigger exists and updates `patients.updated_at` when a patient row changes without an explicit timestamp assignment.
-- Provision Azure SQL Database.
-- Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log (including its unique run/table/stage key), and ctrl.file_ingestion_manifest.
-- For an existing control database, run `02_Metadata Table Queries/add_watermark_lookback.sql` after the control tables exist. It adds `watermark_lookback_minutes` and initializes the existing PostgreSQL patients configuration to five minutes without changing current watermark checkpoints. Fresh installs receive the same field and value from `create_control_tables.sql`.
-- For an existing control database, pause ADF triggers and run `02_Metadata Table Queries/migrate_audit_log_unique_key.sql`. The migration performs a duplicate precheck and fails without deleting history if duplicates exist.
-- Verify seeded source and Gold metadata rows.
-- Confirm timestamp-watermarked PostgreSQL objects have `ctrl.watermark` rows and inspect the file manifest table for CSV feeds. CSV file selection no longer depends on `ctrl.watermark`.
+- Provision Azure SQL Database. Run `02_Metadata Table Queries/create_control_tables.sql` only for a fresh control database. It creates and seeds the four control tables, refuses to run when any target table already exists, and uses a session gate across its GO-separated batches so later statements remain blocked when the preflight fails.
+- For an existing control database, do not rerun the fresh initializer. Run `02_Metadata Table Queries/add_watermark_lookback.sql` after the control tables exist. It adds `watermark_lookback_minutes` and initializes the existing PostgreSQL patients configuration to five minutes only when the column is first introduced; it does not modify existing `ctrl.watermark` checkpoints.
+- For an existing control database, pause ADF triggers and concurrent runs, verify a database recovery point, then run `02_Metadata Table Queries/migrate_audit_log_unique_key.sql`. It stops on duplicate natural keys and also rejects an existing same-name index with an incompatible definition; it never deletes or merges audit history.
+- Verify seeded source and Gold metadata rows. Confirm timestamp-watermarked PostgreSQL objects have `ctrl.watermark` rows and inspect the file manifest table for CSV feeds. CSV file selection no longer depends on `ctrl.watermark`.
 
-Review setup scripts before execution; do not run destructive reset/drop scripts against valuable data.
+**Destructive reset is a separate, explicit operation — not part of deployment or migration.** Only use the reset scripts against a disposable DEV database after verifying the server, database, schema, and that no ADF run is active:
+- PostgreSQL: connect to the intended source database, execute `SET healthgrid.allow_destructive_reset = 'true';` on that connection, then run `01_Sources Data/01_postgres/reset_source_tables.sql` using the same connection. The script consumes the setting with `RESET` before dropping only the three named `public` tables.
+- Azure SQL: connect to the intended control database, execute `EXEC sys.sp_set_session_context @key = N'healthgrid_allow_destructive_reset', @value = 1;` on that session, then run `02_Metadata Table Queries/drop_control_tables.sql` in that same session. The script clears the confirmation context and wraps child-first drops in a transaction with rollback on error. It deletes metadata, watermarks, audit history, and CSV manifest state.
+
+Never run either reset script against an environment whose data or control state must be retained. A reset is not a substitute for the release rollback and recovery procedure in Section 8.
 
 ### D2 — Provision ADLS Gen2
 
