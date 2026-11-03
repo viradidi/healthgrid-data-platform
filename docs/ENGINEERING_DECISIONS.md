@@ -20,6 +20,10 @@ The repository's notebooks use the `healthgrid` Unity Catalog catalog, the `heal
 
 **Trade-off:** ADF exports contain environment-specific linked-service references, notebook paths, storage locations, and global parameters. A redeployment must configure these references for the target environment rather than assuming the exported identifiers are portable.
 
+**Failure propagation:** The master pipeline starts the PostgreSQL and ADLS CSV source branches independently, then waits for both branches to reach a terminal state. An If Condition evaluates each activity's `Status` and invokes Silver-to-Gold only when both are `Succeeded`. The notification pipeline is downstream of that decision's `Completed` path, so it can run after Gold succeeds or fails and also when Gold is intentionally skipped after a source failure. The notification receives each branch status as a parameter and combines them with the table-level audit failure count; a failure before a table-level audit row exists therefore cannot produce a false SUCCESS.
+
+Both source-to-Silver and Silver-to-Gold dispatchers also fail closed when their active metadata lookup returns no rows. This avoids treating an empty ForEach as a successful load or successful Gold publication.
+
 ## 3. Metadata-configured source ingestion
 
 **Decision:** Store source configuration in Azure SQL control tables.
@@ -146,6 +150,8 @@ The calendar provides date keys, day/week/month/quarter/year attributes, period 
 ## 11. Audit and notification controls
 
 The control framework records table-level stage status, ADF run ID, record count, start time, and end time. The natural audit key is `(adf_run_id, table_id, stage)`. A unique constraint enforces one summary row per parent run/object/stage, and `MERGE ... WITH (HOLDLOCK)` makes IN_PROGRESS creation idempotent for retry. Final updates are stage-scoped. This table summarizes the latest attempt; ADF run/activity history retains individual attempt details. A separate notification pipeline reads audit records and posts a status payload to a Logic Apps endpoint.
+
+The notification payload includes the parent PostgreSQL, ADLS CSV, and Gold-gate outcomes as well as table-level audit rows. Its subject is FAILED if any parent branch did not succeed or the audit table contains a non-SUCCESS row. This covers failures that occur before a table-level audit row can be created, such as a failed metadata lookup.
 
 **Operational consideration:** The master pipeline requires both source branches to be Succeeded before starting Gold. The notification branch uses Completed after Gold so it can run after either Gold success or failure. Validate this failure-propagation and notification behavior in the deployed factory; a completed notification activity alone does not prove that upstream processing succeeded.
 
