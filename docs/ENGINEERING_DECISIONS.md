@@ -175,7 +175,7 @@ Credentials should be supplied through secure linked-service configuration and A
 
 ## 14. Deployment and operational decisions
 
-- Treat source-table DDL containing DROP statements as a controlled initialization/reset script, not a non-destructive migration.
+- Keep fresh initialization separate from destructive reset. PostgreSQL source initialization refuses existing tables; the explicit reset script requires a same-session confirmation setting. Azure SQL control-table initialization uses a preflight/session gate across its GO-separated batches, while its reset script requires an explicit session-context flag and a transaction.
 - Configure environment-specific storage, catalog, schema, notebook, linked-service, and notification references together.
 - Preserve the original architecture diagram; update explanatory documentation around it rather than altering the image.
 - Run the validation plan and reconcile source, Bronze, Silver, Gold, and audit counts after redeployment.
