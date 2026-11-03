@@ -27,6 +27,8 @@ The original architecture diagram is intentionally preserved. This guide does no
 | Azure Key Vault | Secret storage for linked services | Vault URI, secret names, managed identity access |
 | Logic Apps endpoint | Pipeline status notification | New endpoint URL stored securely; request schema and authorization |
 
+Before enabling the notification endpoint, implement/inspect the Logic Apps workflow against [the committed ADF producer contract](NOTIFICATION_CONTRACT.md). Confirm the root fields, empty `status_table` handling, legacy recipient key, authorization, receiver-side run-ID deduplication, and actual email action. The Logic Apps workflow definition is not included in this repository; a static ADF validation cannot certify the external consumer schema or mailbox delivery.
+
 The linked-service JSON files contain deployment placeholders for Key Vault, ADLS Gen2, Azure SQL, the Databricks workspace, and the Databricks cluster. Populate each value for the target environment before publishing; do not assume the original cloud resources still exist.
 
 ## 3. Security prerequisite — exposed notification credential
@@ -39,6 +41,7 @@ Before deploying:
 3. Remove the credential-bearing value from tracked Git history where appropriate; deleting it from the latest file alone does not invalidate prior clones or history.
 4. Review access logs for unexpected invocation.
 5. Store the replacement securely. Do not commit the URL, token, or signature.
+6. Confirm the `PL_SEND_EMAIL` request is accepted by the Logic Apps trigger using the exact contract in `docs/NOTIFICATION_CONTRACT.md`; test both populated and empty audit arrays.
 
 The repository also contains a recipient address in exported factory configuration. Review whether it should remain public and move environment-specific recipients into deployment configuration.
 
