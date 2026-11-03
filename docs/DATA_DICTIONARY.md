@@ -15,6 +15,14 @@ Azure Data Factory reads the control metadata and orchestrates ingestion. Data i
 
 The control framework is shared across the processing stages. Active configuration rows determine which source objects and Gold outputs are processed, which load strategy applies, and which target names and execution parameters are supplied to the notebooks.
 
+## 1A. Synthetic data provenance and scope
+
+All checked-in person-level and operational records are synthetic fixtures for this portfolio implementation. The PostgreSQL source setup script generates approximately 50 hospitals, 500 doctors, and 5,000 patient records from fixed name/location lists and generated values. The laboratory CSV files are sample event feeds; insurance-provider reference files use fictional names suffixed with `Demo` and placeholder `.example` contact addresses.
+
+The data is intended to exercise ingestion, metadata configuration, incremental processing, replay handling, data modelling, and operational analytics. It does not represent real patients, actual provider contracts, validated clinical observations, or live healthcare-system integrations. Result-status values such as `Normal`, `Abnormal`, and `Critical` are source labels used for analytical demonstration and must not be interpreted as medical findings.
+
+
+
 ## 2. Source entities
 
 ### 2.1 PostgreSQL: hospitals
