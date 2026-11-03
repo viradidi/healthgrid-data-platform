@@ -117,6 +117,7 @@ One configuration row represents a source object/file or a Gold output. This is 
 | gold_table_name | Gold output name |
 | load_type | Configured strategy: FULL, APPEND, or MERGE |
 | watermark_column | Source field used for incremental selection |
+| watermark_lookback_minutes | Number of minutes re-read before the persisted checkpoint; non-negative and configured per source object |
 | merge_keys | Comma-separated business key fields for MERGE |
 | stage | SOURCE_TO_SILVER or SILVER_TO_GOLD |
 | is_active | Controls whether the configuration is selected for execution |
@@ -139,7 +140,7 @@ One configuration row represents a source object/file or a Gold output. This is 
 | watermark_value | Persisted timestamp checkpoint for timestamp-watermarked sources (PostgreSQL in this project) |
 | last_updated_timestamp | Time the checkpoint record was updated |
 
-Timestamp watermark rows are seeded for PostgreSQL incremental configurations. ADLS CSV sources use the file manifest instead of `ctrl.watermark`.
+Timestamp watermark rows are seeded for PostgreSQL incremental configurations. ADLS CSV sources use the file manifest instead of `ctrl.watermark`. The patients source is seeded with a five-minute lookback; other source metadata defaults to zero. ADF captures a UTC run-start upper bound and extracts `[previous_watermark - lookback, run_start_upper_bound)`. After Silver succeeds, the checkpoint is advanced to that captured upper bound using a monotonic update.
 
 ### 3.3 ctrl.audit_log
 
@@ -184,7 +185,7 @@ The unique file-version identity combines table_id, source_path, source_file_nam
 |---|---|---|---|---|---|
 | neon_postgres | hospitals | hospitals | hospitals | FULL | — |
 | neon_postgres | doctors | doctors | doctors | FULL | — |
-| neon_postgres | patients | patients | patients | MERGE | updated_at / patient_id |
+| neon_postgres | patients | patients | patients | MERGE | updated_at / patient_id; 5-minute lookback |
 | adls_csv | lab_results | lab_results | lab_results | APPEND | File manifest; reported_at is a business event-time field |
 | adls_csv | insurance_providers | insurance_providers | insurance_providers | FULL | — |
 
@@ -292,11 +293,13 @@ The previous-month comparison is based on the previous available monthly row for
 
 ## 9. Operational and interpretation notes
 
-- PostgreSQL watermark values are stored as text in `ctrl.watermark`; source timestamp formats and comparisons must remain consistent. CSV delivery state is tracked separately in `ctrl.file_ingestion_manifest`.
+- PostgreSQL watermark values are stored as text in `ctrl.watermark`; source timestamp formats and comparisons must remain consistent. CSV delivery state is tracked separately in `ctrl.file_ingestion_manifest`. Patient source `updated_at` values are stored as timestamp-without-time-zone values normalized to UTC by the supplied source SQL.
 - The configured patient MERGE key is patient_id; the source update timestamp is used for incremental selection.
 - APPEND feeds need a clear duplicate-delivery and replay policy.
 - The current source extraction pattern is watermark-based, not full change-data capture.
-- Hard deletes and late-arriving changes require an explicit source contract and handling policy.
+- The five-minute overlap mitigates short transaction delays and replay gaps, but changes arriving later than the configured window can still be missed.
+- Hard deletes are not captured; a source delete contract, soft-delete field, or CDC mechanism is required if deletes must propagate.
+- The source must update `updated_at` on every relevant mutation and keep it in UTC. Runtime proof of boundary, concurrency, and late-arrival scenarios still requires a restored Azure environment.
 - Gold notebooks use full rebuilds, even though their selection and orchestration are metadata-driven.
 - The calendar dimension has a finite configured date range.
 - Source data in this educational repository is synthetic; it is not a production healthcare dataset.
