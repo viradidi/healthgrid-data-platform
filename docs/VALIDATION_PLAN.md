@@ -235,6 +235,22 @@ The producer-side JSON structure is statically checked in repository CI. NOTIF-0
 
 The audit implementation now uses `(adf_run_id, table_id, stage)` as its natural key. Start activities use a `MERGE ... WITH (HOLDLOCK)` upsert, and status updates include the stage. This deliberately retains the latest attempt summary per table/stage/parent run; ADF execution history remains the source for per-attempt detail.
 
+
+## 8B. Release rollback and data recovery tests
+
+| ID | Scenario | Test procedure | Acceptance criteria |
+|---|---|---|---|
+| RCV-01 | Pre-change recovery baseline | Before a disposable deployment, record the release commit, deployed ADF version, active metadata, watermarks, unresolved manifest rows, audit/run IDs, and target Delta versions/counts | A reviewer can identify the exact code/configuration and data/control recovery points before the change |
+| RCV-02 | ADF and notebook code rollback | Deploy a candidate change, then restore the known-good ADF exports and notebook files from a recorded commit and publish/re-import them | The live ADF factory and workspace notebook contents match the intended known-good release; a Git revert alone is not accepted as proof |
+| RCV-03 | FULL overwrite recovery | Capture a recoverable baseline, run a FULL load in a disposable environment, then rehearse recovery using a retained Delta version or a verified complete source/landing rebuild | The pre-change target can be restored/reconstructed and its schema, row count, and business grain reconcile |
+| RCV-04 | APPEND and MERGE replay recovery | Inject a failure after a data write but before the complete control/audit path; inspect actual target state before replaying the same batch | APPEND is not blindly duplicated; MERGE replay follows key/version/payload rules; the recovery action and resulting row counts are evidenced |
+| RCV-05 | Control database restore and cutover | Restore a control database recovery point to a separate database in a disposable environment; compare metadata, watermark, audit, and manifest state with actual lake data before switching a linked service | No control database cutover occurs until watermarks and manifest states are reconciled to the actual Bronze/Silver results |
+| RCV-06 | Watermark and manifest repair | Create an interrupted run with a checkpoint and/or file manifest state requiring reconciliation; follow the runbook using ADF activity history and landing/Delta evidence | Checkpoints are not advanced and files are not marked PROCESSED until their corresponding data outcome is verified |
+| RCV-07 | Gold publication recovery | Inject a Gold notebook failure around CREATE OR REPLACE, restore the known-good notebook, and rebuild from verified Silver inputs or a validated retained Delta version | Gold grain and metrics reconcile; no partially or incorrectly published result is accepted |
+
+These are release-recovery tests, not repository-only checks. They require a disposable Azure/Databricks environment with recoverable SQL/Delta state and must be marked BLOCKED rather than PASS when that environment or evidence is unavailable.
+
+
 ## 9. Gold analytical validation
 
 ### Patient 360
@@ -305,6 +321,7 @@ Document excluded, rejected, duplicated, or late-arriving records. Every differe
 | G4 — Silver | Strategy tests, keys, counts, watermark | Correct write semantics and checkpoint state |
 | G5 — Gold | Grain and business-metric assertions | All three Gold outputs reconcile |
 | G6 — Recovery | Failure injection and rerun evidence | Recovery does not silently lose or duplicate data |
+| G6A — Release rollback | Pre-change baseline, known-good artifact restoration, and data/control-state reconciliation | Code rollback and persisted data/control state are independently restored and verified |
 | G7 — Orchestration | Parent/child outcomes and audit trail | Failed upstream work cannot be accepted as successful end-to-end run |
 | G7A — Notification | Request contract, endpoint acknowledgement, Logic Apps run, and email-action evidence | Failure outcomes are observable and test notifications reach the approved test recipient |
 | G8 — Sign-off | Test report, exceptions, owner, run IDs | Critical tests pass or have explicit accepted exception |
