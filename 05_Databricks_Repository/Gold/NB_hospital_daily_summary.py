@@ -7,6 +7,71 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,Validate hospital event and calendar relationships
+from pyspark.sql import functions as F
+
+lab_source = spark.table("healthgrid.silver.lab_results")
+hospitals_source = spark.table("healthgrid.silver.hospitals")
+doctors_source = spark.table("healthgrid.silver.doctors")
+calendar_source = spark.table("healthgrid.silver.calendar")
+
+def assert_unique_non_null_key(dataframe, key, label):
+    if dataframe.filter(F.col(key).isNull()).limit(1).count():
+        raise ValueError(f"{label}.{key} contains NULL values.")
+    duplicates = (
+        dataframe.groupBy(key)
+        .count()
+        .filter(F.col("count") > 1)
+        .limit(1)
+        .count()
+    )
+    if duplicates:
+        raise ValueError(f"{label}.{key} is not unique; Gold join cardinality is unsafe.")
+
+assert_unique_non_null_key(lab_source, "lab_result_id", "lab_results")
+assert_unique_non_null_key(hospitals_source, "hospital_id", "hospitals")
+assert_unique_non_null_key(doctors_source, "doctor_id", "doctors")
+assert_unique_non_null_key(calendar_source, "date_key", "calendar")
+
+allowed_statuses = ["Normal", "Abnormal", "Critical"]
+invalid_lab_events = lab_source.filter(
+    F.col("hospital_id").isNull()
+    | F.col("doctor_id").isNull()
+    | F.col("test_date").isNull()
+    | F.col("result_status").isNull()
+    | (~F.col("result_status").isin(allowed_statuses))
+).limit(1).count()
+if invalid_lab_events:
+    raise ValueError("lab_results contains a NULL hospital/doctor/date/status or unsupported result_status.")
+
+orphan_hospital_events = (
+    lab_source.select("hospital_id").distinct()
+    .join(hospitals_source.select("hospital_id"), on="hospital_id", how="left_anti")
+    .limit(1).count()
+)
+if orphan_hospital_events:
+    raise ValueError("lab_results contains hospital_id values missing from Silver hospitals.")
+
+orphan_doctor_events = (
+    lab_source.select("doctor_id").distinct()
+    .join(doctors_source.select("doctor_id"), on="doctor_id", how="left_anti")
+    .limit(1).count()
+)
+if orphan_doctor_events:
+    raise ValueError("lab_results contains doctor_id values missing from Silver doctors.")
+
+event_dates = lab_source.select(F.to_date("test_date").alias("event_date")).distinct()
+calendar_dates = calendar_source.select(F.to_date("date").alias("event_date")).distinct()
+missing_calendar_dates = (
+    event_dates.join(calendar_dates, on="event_date", how="left_anti")
+    .limit(1).count()
+)
+if missing_calendar_dates:
+    raise ValueError("Silver calendar does not cover every laboratory test_date used by hospital daily reporting.")
+
+# COMMAND ----------
+# COMMAND ----------
+
 # DBTITLE 1,Create hospital daily summary gold table
 # MAGIC %sql
 # MAGIC CREATE SCHEMA IF NOT EXISTS healthgrid.gold;
@@ -88,6 +153,11 @@ required_columns = {
 missing_columns = sorted(required_columns - set(updated_df.columns))
 if missing_columns:
     raise ValueError(f"hospital_daily_summary is missing required columns: {missing_columns}")
+
+if updated_df.filter(
+    F.col("hospital_name").isNull() | F.col("day_name").isNull() | F.col("is_weekend").isNull()
+).limit(1).count():
+    raise ValueError("hospital_daily_summary contains unresolved hospital or calendar enrichment.")
 
 if updated_df.filter(
     F.col("hospital_id").isNull() | F.col("summary_date").isNull()
