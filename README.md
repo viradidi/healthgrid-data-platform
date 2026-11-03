@@ -30,6 +30,7 @@ The architecture diagram above is the original project diagram and is intentiona
 2. **Metadata and orchestration**
    - Azure SQL Database stores source configuration, load strategies, watermarks, and audit records.
    - Azure Data Factory reads active configuration and orchestrates source-to-Silver and Silver-to-Gold processing.
+   - The master pipeline waits for both source branches, gates Gold on both succeeding, and sends a run notification after the Gold decision—including source-failure paths.
 3. **Landing and storage**
    - Azure Data Lake Storage Gen2 receives source extracts and partner files.
    - Databricks landing processing reads each timestamped landing batch and appends it to the corresponding Bronze table.
