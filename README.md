@@ -68,7 +68,7 @@ The source-to-Silver framework uses `ctrl.table_config` to select active source 
 
 The PostgreSQL watermark approach is not a substitute for CDC: its correctness depends on source timestamps being maintained reliably and on the chosen watermark semantics being appropriate for the source. CSV selection is based on file metadata, not the `reported_at` business event-time column.
 
-For the PostgreSQL `patients` MERGE source, metadata configures a five-minute lookback. ADF captures a fixed UTC upper bound at run start and extracts the interval from the inclusive previous-checkpoint-minus-lookback boundary to that exclusive upper bound. The checkpoint advances to the captured run-start bound only after Bronze-to-Silver succeeds, and the update is monotonic so an older overlapping run cannot move it backwards. The overlap is replay-safe because Silver uses the version-aware `patient_id` MERGE.
+For the PostgreSQL `patients` MERGE source, metadata configures a five-minute lookback. ADF captures a fixed UTC upper bound at run start and extracts the interval from the inclusive previous-checkpoint-minus-lookback boundary to that exclusive upper bound. The checkpoint advances to the captured run-start bound only after Bronze-to-Silver succeeds, and the update is monotonic so an older overlapping run cannot move it backwards. The overlap is replay-safe because Silver uses the version-aware `patient_id` MERGE. The supplied PostgreSQL source DDL also installs a `BEFORE UPDATE` trigger that refreshes `patients.updated_at` in UTC even when an individual update statement omits the field.
 
 ## Medallion data layers
 
