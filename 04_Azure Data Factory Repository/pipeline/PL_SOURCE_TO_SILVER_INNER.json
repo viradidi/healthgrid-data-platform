@@ -320,7 +320,7 @@
               "typeProperties": {
                 "variableName": "watermark_value",
                 "value": {
-                  "value": "@activity('Read watermark').output.firstRow.watermark_value",
+                  "value": "@string(coalesce(activity('Read watermark').output.firstRow.watermark_value,''))",
                   "type": "Expression"
                 }
               }
