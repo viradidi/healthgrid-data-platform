@@ -141,9 +141,12 @@ The control framework includes:
 
 ## Repository validation
 
-The repository includes a [GitHub Actions validation workflow](.github/workflows/healthgrid-validation.yml) that checks exported JSON, Databricks notebook code-cell syntax, Python syntax, required documentation, the preserved architecture-image embed, and selected credential patterns.
+The repository has two deliberately separate GitHub Actions workflows:
 
-These are static repository checks. They do not execute Azure Data Factory pipelines or Databricks workloads.
+- [Repository validation](.github/workflows/healthgrid-validation.yml) runs on relevant pushes and pull requests. It validates exported JSON, Databricks notebook code-cell syntax, Python syntax, repository contracts, required documentation, the preserved architecture-image embed, and selected credential patterns. Its path filters include SQL, CSV, workbook, and architecture assets.
+- [Azure integration validation](.github/workflows/healthgrid-azure-integration.yml) is manually triggered and gated by a GitHub Environment. When a disposable DEV environment and GitHub OIDC configuration are available, it starts the ADF `PL_MASTER` pipeline and monitors the run to completion. ADF then invokes the configured Databricks notebook activities.
+
+The repository-validation workflow is static by design; it does not start cloud services or incur Azure compute costs. The integration workflow is not run on every commit and remains unavailable until its Azure resources, identity federation, environment secrets, and variables are configured. A successful master run is one end-to-end signal, not a substitute for the scenario-level data reconciliation and failure-injection tests in [the validation plan](docs/VALIDATION_PLAN.md).
 
 ## Running and redeploying the project
 
