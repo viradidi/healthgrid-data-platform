@@ -76,9 +76,12 @@ Gold notebooks use full rebuild/replace behavior. Validate target consistency an
 
 ### CI/CD
 
-A GitHub Actions workflow now exists at .github/workflows/healthgrid-validation.yml. It validates JSON syntax, notebook code-cell syntax, Python syntax, required documentation files, the exact README architecture-image embed, and selected high-confidence credential patterns.
+Two GitHub Actions workflows now exist:
 
-The repository validation workflow has passed recent GitHub Actions runs, including JSON validation, Python notebook-cell syntax, SQL notebook language recognition, required documentation, architecture-image embed, selected credential-pattern checks, and static contracts for the Silver MERGE metadata handoff and version/key safeguards. These static checks do not execute ADF pipelines or Databricks workloads.
+- `.github/workflows/healthgrid-validation.yml` runs automatic repository checks. Its path filters include SQL, CSV, XLSX, documentation, notebooks, JSON, Python, and architecture assets so those changes trigger validation.
+- `.github/workflows/healthgrid-azure-integration.yml` is manually triggered, requires an explicit confirmation, and runs behind the `healthgrid-integration` GitHub Environment. Once configured with Azure OIDC and a disposable DEV factory, it starts and monitors the ADF `PL_MASTER` pipeline, which invokes the configured Databricks activities.
+
+The repository-validation workflow has passed after the workflow and artifact updates. These checks remain static. The Azure integration workflow is a provisioned capability only; it has not been executed because the original Azure resources were decommissioned. A future successful ADF run must still be accompanied by activity-level review, Databricks output inspection, audit/watermark checks, and data reconciliation.
 
 ## Architecture preservation
 
