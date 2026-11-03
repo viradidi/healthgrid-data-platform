@@ -140,7 +140,7 @@ jobs:
                   "exactly one row",
                   "copy-level no-file/error",
                   "not cdc",
-                  "adf-19 through adf-24",
+                  "adf-18 through adf-24",
               ):
                   if contract_phrase not in adf_contract.lower():
                       errors.append(f"ADF source extraction contract is missing required boundary: {contract_phrase}")
