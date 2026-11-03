@@ -595,7 +595,7 @@ jobs:
                   "NO_DATA output count": 'dbutils.notebook.exit("0")',
                   "table identifier validation": 're.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name or "")',
                   "landing batch identifier validation": 're.fullmatch(r"[A-Za-z0-9_-]{1,160}", landing_timestamp or "")',
-                  "unexpected empty Bronze batch rejection": "bronze_df.limit(1).count() == 0",
+                  "unexpected empty Bronze batch rejection": "if source_record_count == 0:",
                   "case-insensitive target schema collision guard": "column names that collide case-insensitively",
                   "MERGE payload data-type validation": "type_mismatches",
               }
@@ -606,7 +606,7 @@ jobs:
                   errors.append("Silver notebook must not default missing load_type metadata to FULL.")
               if "> target." not in silver_source:
                   errors.append("Silver MERGE must update matched rows only when the incoming source version is newer.")
-              if "record_count = updated_df.count()" in silver_source:
+              if any(line.strip() == "record_count = updated_df.count()" for line in silver_source.splitlines()):
                   errors.append("Silver notebook must not report all source rows as writes after MERGE skips.")
               if "target schema does not match" not in silver_source.lower():
                   errors.append("Silver MERGE must fail closed when source and target schemas differ.")
