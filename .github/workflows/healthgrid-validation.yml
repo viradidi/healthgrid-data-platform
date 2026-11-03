@@ -925,6 +925,57 @@ jobs:
                       if "IF @@ROWCOUNT <> 1" not in failure_sql:
                           errors.append(f"{stage} failure audit update must fail if exactly one row was not updated.")
 
+              # Gold model mapping, output-count meaning, and failure termination.
+              expected_gold_models = {
+                  "patient_360": "05_Databricks_Repository/Gold/NB_patient_360.py",
+                  "hospital_daily_summary": "05_Databricks_Repository/Gold/NB_hospital_daily_summary.py",
+                  "lab_test_trends": "05_Databricks_Repository/Gold/NB_lab_test_trends.py",
+              }
+              gold_runner = find_activity(gold_pipeline, "Silver to Gold")
+              gold_runner_path = gold_runner.get("typeProperties", {}).get("notebookPath", {}).get("value", "")
+              if "NB_@{item().gold_table_name}" not in gold_runner_path:
+                  errors.append("Gold notebook path must be resolved from the selected metadata gold_table_name.")
+              gold_lookup = find_activity(gold_pipeline, "Read Source Tables List")
+              gold_lookup_sql = gold_lookup.get("typeProperties", {}).get("source", {}).get("sqlReaderQuery", {}).get("value", "")
+              for required in ("table_id", "gold_table_name", "is_active=1", "SILVER_TO_GOLD"):
+                  if required not in gold_lookup_sql:
+                      errors.append(f"Gold metadata lookup is missing required active-model field/filter: {required}.")
+              for model_name, model_path in expected_gold_models.items():
+                  if not Path(model_path).is_file():
+                      errors.append(f"Configured Gold notebook is missing: {model_path}")
+                      continue
+                  model_source = Path(model_path).read_text(encoding="utf-8")
+                  if f"CREATE OR REPLACE TABLE healthgrid.gold.{model_name}" not in model_source:
+                      errors.append(f"{model_name} must materialize its configured Gold output table.")
+                  if "record_count = updated_df.count()" not in model_source:
+                      errors.append(f"{model_name} must count its materialized Gold output rows.")
+                  if 'dbutils.notebook.exit(str(record_count))' not in model_source:
+                      errors.append(f"{model_name} must return the validated Gold output row count to ADF.")
+                  model_lines = [line.strip() for line in model_source.splitlines()]
+                  if any(line in {"updated_df", "up"} for line in model_lines):
+                      errors.append(f"{model_name} contains an orphan expression before its output validation cell.")
+                  if "required_columns" not in model_source or "duplicate_" not in model_source:
+                      errors.append(f"{model_name} must retain its schema and grain validation.")
+              gold_fail_update = find_activity(gold_pipeline, "Update Fialed Status")
+              gold_fail_terminator = find_activity(gold_pipeline, "Update pipeline as failed")
+              if not gold_fail_update or not gold_fail_terminator:
+                  errors.append("Gold failure path must update audit state and terminate the pipeline.")
+              else:
+                  fail_deps = gold_fail_terminator.get("dependsOn", [])
+                  if not any(
+                      dep.get("activity") == "Update Fialed Status"
+                      and dep.get("dependencyConditions") == ["Succeeded"]
+                      for dep in fail_deps
+                  ):
+                      errors.append("Gold pipeline Fail activity must run only after the failure-audit update succeeds.")
+              gold_success_update = find_activity(gold_pipeline, "Update Success Status")
+              gold_success_sql = "\\n".join(
+                  script.get("text", {}).get("value", "")
+                  for script in (gold_success_update or {}).get("typeProperties", {}).get("scripts", [])
+              )
+              if "records_written = @{activity('Silver to Gold').output.runOutput}" not in gold_success_sql:
+                  errors.append("Gold success audit must store the notebook's validated output row count.")
+
               source_success = find_activity(inner_pipeline, "Update Success Status")
               gold_success = find_activity(gold_pipeline, "Update Success Status")
               for activity, stage in [
