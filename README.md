@@ -95,7 +95,7 @@ For the PostgreSQL `patients` MERGE source, metadata configures a five-minute lo
 
 ### Bronze — landed source batches
 
-The Landing-to-Bronze notebook reads CSV or Parquet files from the timestamped landing path, adds landing and ingestion timestamps, and appends the batch to the corresponding Bronze table. This preserves the ingested batch context for subsequent processing.
+The Landing-to-Bronze notebook validates its source/table/batch parameters and file format, reads CSV or Parquet files from the timestamped landing path, and appends the batch to Bronze with `landing_timestamp` and `insert_timestamp`. It rejects invalid or missing load metadata instead of assuming FULL, rejects empty FULL extracts, blocks source columns that collide with reserved batch metadata, fails closed on case-insensitive schema drift or data-type changes, and prevents a landing timestamp already present in Bronze from being appended again. This protects batch traceability and exact-batch replay; it does not deduplicate the same business rows arriving under a different landing timestamp.
 
 ### Silver — standardized source tables
 
