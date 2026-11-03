@@ -24,6 +24,7 @@ PRINT CONCAT('HealthGrid control-table reset explicitly authorized for database:
 SET XACT_ABORT ON;
 
 BEGIN TRY
+    SET XACT_ABORT ON;
     BEGIN TRANSACTION;
 
     IF OBJECT_ID('ctrl.file_ingestion_manifest', 'U') IS NOT NULL
@@ -39,9 +40,11 @@ BEGIN TRY
         DROP TABLE ctrl.table_config;
 
     COMMIT TRANSACTION;
+    EXEC sys.sp_set_session_context @key = N'healthgrid_allow_destructive_reset', @value = NULL;
 END TRY
 BEGIN CATCH
     IF XACT_STATE() <> 0
         ROLLBACK TRANSACTION;
+    EXEC sys.sp_set_session_context @key = N'healthgrid_allow_destructive_reset', @value = NULL;
     THROW;
 END CATCH;
