@@ -99,13 +99,17 @@ The Landing-to-Bronze notebook reads CSV or Parquet files from the timestamped l
 
 ### Silver — standardized source tables
 
-The Bronze-to-Silver notebook processes the Bronze records for the current landing timestamp. It supports three configured write strategies:
+The shared Bronze-to-Silver notebook reads only the Bronze records for the current ADF landing timestamp and applies the configured strategy:
 
-- **FULL:** overwrite the Silver target with the current processed batch.
-- **APPEND:** append the current batch to the Silver target.
-- **MERGE:** match configured business keys and update matched rows or insert new rows.
+| Strategy | Behavior | Safety boundary |
+|---|---|---|
+| **FULL** | Replaces the Silver target with the current complete batch. | Missing/invalid load metadata is rejected rather than defaulting to FULL. A FULL batch must contain data; Landing-to-Bronze rejects an empty FULL extract before Silver can be overwritten. |
+| **APPEND** | Adds the current batch to the Silver target. | It does not deduplicate business records across different landing timestamps. Exact CSV file versions are guarded by the file manifest, but revised whole-file snapshots or a newly identified batch containing prior events can still duplicate rows. |
+| **MERGE** | Inserts new keys and updates existing keys only when the incoming source version is newer. | Requires non-null, unique source keys and non-null DATE/TIMESTAMP versions; validates target keys, schema names and data types before mutation. |
 
-For MERGE, the framework passes the metadata-configured source version column, rejects null or duplicate business keys, and updates matched rows only when the incoming source version is newer. Equal-version conflicts fail rather than silently overwriting data.
+For MERGE, the shared notebook rejects duplicate source keys rather than selecting an arbitrary winner. Existing target keys must also be non-null and unique. Older source versions are skipped; an equal-version identical payload is a no-op; an equal-version payload conflict fails for reconciliation. Operational batch timestamps are excluded from the equal-version business-payload comparison.
+
+The notebook also validates its ADF hand-off: it accepts only DATA or NO_DATA status, restricts table and batch identifiers to safe formats, rejects an unexpected empty Bronze batch reported as DATA, and never assumes FULL when load metadata is missing or invalid. The repository CI workflow checks these static contracts and notebook Python syntax. Spark/Delta behavior still requires runtime tests in a restored Databricks environment.
 
 A calendar dimension is also prepared in Silver to support date-based reporting.
 
