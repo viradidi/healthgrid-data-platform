@@ -53,7 +53,6 @@ if missing_calendar_months:
     raise ValueError("Silver calendar does not cover every month used by lab_test_trends.")
 
 # COMMAND ----------
-# COMMAND ----------
 
 # DBTITLE 1,Create lab test trends gold table
 # MAGIC %sql
