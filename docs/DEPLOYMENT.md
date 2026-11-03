@@ -145,6 +145,8 @@ Review and update:
 
 Keep the metadata-driven pattern intact: source-to-Silver processing is configured from active SOURCE_TO_SILVER rows in ctrl.table_config; Gold orchestration selects active SILVER_TO_GOLD rows and resolves notebook paths from gold_table_name. Dataset-specific analytical transformations remain in their Databricks notebooks.
 
+Before publishing, review the [ADF Source Extraction Contract](ADF_SOURCE_EXTRACTION_CONTRACT.md). Confirm that source dispatch accepts only the two configured source systems, both source lookups are scoped to active SOURCE_TO_SILVER metadata, inner table_id is numeric, PostgreSQL incremental watermark rows are valid, and the Copy query resolves the intended schema/table and half-open timestamp interval. Validate these expression paths in a disposable factory before enabling schedules.
+
 ### D6 — Validate one source object at a time
 
 1. Test each linked service.
