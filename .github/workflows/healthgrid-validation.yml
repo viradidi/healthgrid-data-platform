@@ -7,16 +7,24 @@ on:
       - "**/*.json"
       - "**/*.ipynb"
       - "**/*.py"
+      - "**/*.sql"
       - "**/*.md"
-      - ".github/workflows/healthgrid-validation.yml"
+      - "**/*.csv"
+      - "**/*.xlsx"
+      - "assets/**"
+      - ".github/workflows/**"
   pull_request:
     branches: [main]
     paths:
       - "**/*.json"
       - "**/*.ipynb"
       - "**/*.py"
+      - "**/*.sql"
       - "**/*.md"
-      - ".github/workflows/healthgrid-validation.yml"
+      - "**/*.csv"
+      - "**/*.xlsx"
+      - "assets/**"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
