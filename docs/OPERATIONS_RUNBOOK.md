@@ -95,7 +95,7 @@ The source is extracted without a watermark predicate. Silver uses overwrite mod
 For the ADLS CSV lab-results feed, the file manifest selects new file versions and Silver appends the corresponding batch. `reported_at` is a business event-time field, not the ADF file-selection checkpoint. Exact processed file versions are skipped, but a changed whole-file snapshot is a new version and can reappend rows that existed in the prior version. The feed should be immutable/additive or have a row-level deduplication policy.
 
 ### MERGE
-For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at`, `patient_id`, and a five-minute `watermark_lookback_minutes` overlap; ADF passes `watermark_column` into the Silver notebook as its source-version field.
+For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at`, `patient_id`, and a five-minute `watermark_lookback_minutes` overlap; ADF passes `watermark_column` into the Silver notebook as its source-version field. The supplied source DDL installs a trigger that refreshes `updated_at` in UTC for every patient update, including updates that omit the timestamp column.
 
 Before mutation, the notebook rejects null or duplicate source keys, null source versions, null/duplicate target keys, null target versions, and source/target schema mismatches. Matched rows update only when the incoming version is newer. Older versions are skipped and counted. Equal-version rows with unchanged business values are no-ops; equal-version rows with changed business values fail.
 
