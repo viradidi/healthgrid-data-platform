@@ -49,17 +49,19 @@ The sample configuration uses FULL for hospitals, doctors, and insurance provide
 
 **Decision:** Use a persisted watermark for incremental source extraction rather than implementing a full CDC service.
 
-The ADF pipeline reads the stored watermark for non-FULL PostgreSQL loads and filters the source using the configured watermark column. The control value is advanced after the Bronze-to-Silver processing path succeeds. ADLS CSV feeds do not use this timestamp watermark.
+The ADF pipeline reads the stored watermark for non-FULL PostgreSQL loads and filters the source using the configured watermark column. Metadata supplies a per-object `watermark_lookback_minutes` value. For the current patients MERGE source it is set to five minutes. At the start of each source-table run, ADF captures a fixed UTC upper bound; the source query reads the half-open interval `[previous watermark - lookback, run-start upper bound)`. The persisted checkpoint advances to that captured upper bound only after Bronze-to-Silver succeeds. A monotonic SQL update prevents an older overlapping run from moving the checkpoint backwards. ADLS CSV feeds continue to use their file-version manifest rather than this timestamp watermark.
 
-**Rationale:** This provides a relatively simple incremental pattern for the sample source systems and keeps progress state in a central control database.
+**Rationale:** The fixed upper bound prevents records updated after extraction starts from being hidden behind a checkpoint taken at pipeline completion. The configurable overlap helps recover records that become visible shortly after extraction or whose source timestamp is slightly behind the prior checkpoint. The patients Silver MERGE is version-aware and replay-safe for this bounded re-read.
 
 **Correctness assumptions and limitations:**
 - This timestamp watermark pattern applies to PostgreSQL sources in this project; ADLS CSV selection uses the per-file manifest.
-- Source update timestamps must be maintained reliably.
-- The extraction predicate uses a strict greater-than comparison, so records sharing an already-processed timestamp need deliberate handling.
-- Late-arriving updates, hard deletes, source clock differences, and timestamp collisions are not equivalent to CDC and need explicit policies.
-- The exported pipeline advances the stored watermark using the current UTC time rather than calculating the maximum source timestamp observed in the batch. This should be reviewed against source timestamp semantics and tested for boundary conditions before a new production deployment.
-- Watermark advancement must remain downstream of successful processing; failed or partially completed runs should not move the checkpoint forward.
+- The supplied PostgreSQL source DDL and incremental fixtures normalize the timestamp-without-time-zone values to UTC. External sources must follow the same UTC contract, update the watermark column on every relevant mutation, and avoid backdating updates outside the documented lookback.
+- The overlap is a mitigation, not a completeness guarantee. Updates arriving more than five minutes late, unmaintained timestamps, hard deletes, and some clock/transaction anomalies can still be missed.
+- The source query uses an inclusive lower bound and exclusive run-start upper bound. Re-reading boundary rows is expected; the MERGE's key/version checks provide idempotent handling for unchanged replays.
+- Checkpoint advancement is downstream of successful processing and records the fixed run-start upper bound, not pipeline completion time or the maximum source timestamp found in the batch.
+- This remains watermark-based extraction, not log-based CDC. If hard-delete capture or a strict no-loss change history is required, use source CDC/logical replication or an explicit soft-delete/change-event contract.
+
+Runtime boundary and concurrency scenarios remain in the validation plan and require a restored Azure environment.
 
 ## 6. Bronze landing and batch context
 
