@@ -23,6 +23,31 @@ For each test, retain the test ID, objective, environment/version, ADF parent an
 
 These tests require execution in a configured Azure environment. Static inspection or a successful packaging workflow is not a substitute for runtime validation.
 
+## 2A. Automated validation layers
+
+HealthGrid separates repository checks from cloud integration execution so normal code review does not unexpectedly provision or consume Azure compute.
+
+### Repository validation — automatic
+
+The [repository validation workflow](../.github/workflows/healthgrid-validation.yml) runs on relevant pushes and pull requests. It performs static checks on JSON exports, notebook structure and Python code-cell syntax, Python files, ADF/Databricks configuration contracts, required documentation, the protected architecture embed, and selected credential patterns. Its path filters include `.sql`, `.csv`, `.xlsx`, and `assets/**` so changes to source/control SQL and data/mapping assets are not silently excluded.
+
+A passing result establishes repository consistency and selected code/configuration contracts. It does **not** prove that Azure connections, ADF expressions, Databricks runtime behavior, Unity Catalog permissions, Delta operations, or business results work in a deployed environment.
+
+### Azure integration validation — manual and environment-gated
+
+The [Azure integration workflow](../.github/workflows/healthgrid-azure-integration.yml) can be started manually after a disposable DEV environment has been restored. It requires an explicit confirmation input and uses the GitHub Environment named `healthgrid-integration`. It starts the ADF `PL_MASTER` pipeline and polls the ADF run status. The master pipeline is expected to invoke the source-to-Silver branches, the Silver-to-Gold pipeline, and the Databricks notebook activities configured in ADF.
+
+The workflow requires GitHub Environment secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`, plus Environment variables `HEALTHGRID_AZURE_RESOURCE_GROUP` and `HEALTHGRID_AZURE_DATA_FACTORY_NAME`. Configure Microsoft Entra workload identity federation for the subject `repo:viradidi/healthgrid-data-platform:environment:healthgrid-integration` and audience `api://AzureADTokenExchange`. Scope a least-privilege custom role to the target Data Factory with permissions to read the factory/pipeline/run, create a pipeline run, and cancel a run created by this workflow. Do not grant subscription-wide Contributor solely for this check.
+
+Before triggering it:
+- Restore and publish the ADF factory and confirm all linked services, Key Vault references, Databricks workspace/compute, notebook paths, source systems, and metadata are valid.
+- Ensure the target is a disposable DEV environment containing only synthetic data. `PL_MASTER` runs the configured sources and Gold rebuild; it can overwrite targets and invoke the notification path.
+- Configure the `healthgrid-integration` GitHub Environment with an approval requirement where available. Do not configure this workflow to run automatically on pull requests or pushes.
+
+On completion, retain the ADF run ID and inspect individual activity runs, Databricks notebook outputs, audit rows, watermarks, row counts, and Gold-grain reconciliations. A workflow result of `Succeeded` confirms the master pipeline reached a successful terminal state; it does not independently prove every test case in this plan has passed.
+
+The original Azure resources were decommissioned after the project was completed to control cost. Therefore, this live workflow has been added as a gated capability but has **not** been executed against a currently restored environment.
+
 ## 3. Metadata framework tests
 
 | ID | Scenario | Test procedure | Acceptance criteria |
