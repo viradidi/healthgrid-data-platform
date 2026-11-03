@@ -124,7 +124,7 @@ VALUES
 
     ('neon_postgres', 'public', 'doctors', NULL, NULL,
      'doctors', 'doctors', NULL,
-     'FULL', NULL, NULL, 'SOURCE_TO_SILVER', 1),
+     'FULL', NULL, 0, NULL, 'SOURCE_TO_SILVER', 1),
 
     ('neon_postgres', 'public', 'patients', NULL, NULL,
      'patients', 'patients', NULL,
@@ -137,7 +137,7 @@ VALUES
 
     ('adls_csv', NULL, 'insurance_providers', 'csv', 'insurance_providers',
      'insurance_providers', 'insurance_providers', NULL,
-     'FULL', NULL, NULL, 'SOURCE_TO_SILVER', 1);
+     'FULL', NULL, 0, NULL, 'SOURCE_TO_SILVER', 1);
 GO
 
 /* =====================================================================
