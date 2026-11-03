@@ -120,11 +120,30 @@ jobs:
               "docs/ARTIFACT_AUDIT.md",
               "docs/FILE_INGESTION_MANIFEST.md",
               "docs/SOURCE_FIXTURE_CONTRACT.md",
+              "docs/ADF_SOURCE_EXTRACTION_CONTRACT.md",
               "docs/NOTIFICATION_CONTRACT.md",
           ]
           for name in required_docs:
               if not Path(name).is_file():
                   errors.append(f"Required documentation missing: {name}")
+
+          adf_contract_path = Path("docs/ADF_SOURCE_EXTRACTION_CONTRACT.md")
+          if not adf_contract_path.is_file():
+              errors.append("ADF source extraction contract document is required.")
+          else:
+              adf_contract = adf_contract_path.read_text(encoding="utf-8")
+              for contract_phrase in (
+                  "metadata-to-source path",
+                  "double-quoted identifiers",
+                  "Missing watermark row",
+                  "half-open interval",
+                  "exactly one row",
+                  "Copy-level no-file/error",
+                  "not CDC",
+                  "ADF-19 through ADF-24",
+              ):
+                  if contract_phrase not in adf_contract:
+                      errors.append(f"ADF source extraction contract is missing required boundary: {contract_phrase}")
 
           # Release rollback and persisted-state recovery documentation contract.
           deployment_doc = Path("docs/DEPLOYMENT.md").read_text(encoding="utf-8")
