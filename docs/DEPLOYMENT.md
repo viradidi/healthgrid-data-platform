@@ -78,6 +78,7 @@ The repository also contains a recipient address in exported factory configurati
 
 - Provision PostgreSQL and create source tables using the source SQL scripts.
 - Load intended synthetic source fixtures.
+- Verify the PostgreSQL `trg_patients_updated_at_utc` trigger exists and updates `patients.updated_at` when a patient row changes without an explicit timestamp assignment.
 - Provision Azure SQL Database.
 - Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log (including its unique run/table/stage key), and ctrl.file_ingestion_manifest.
 - For an existing control database, run `02_Metadata Table Queries/add_watermark_lookback.sql` after the control tables exist. It adds `watermark_lookback_minutes` and initializes the existing PostgreSQL patients configuration to five minutes without changing current watermark checkpoints. Fresh installs receive the same field and value from `create_control_tables.sql`.
