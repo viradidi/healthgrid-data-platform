@@ -18,7 +18,7 @@
           "source": {
             "type": "AzureSqlSource",
             "sqlReaderQuery": {
-              "value": "select * from ctrl.audit_log where adf_run_id='@{pipeline().parameters.adf_run_id}'",
+              "value": "SELECT audit_id, adf_run_id, table_id, stage, status, records_written, start_time, end_time, created_timestamp\nFROM ctrl.audit_log\nWHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'\nORDER BY table_id, stage;",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
@@ -151,7 +151,7 @@
         "typeProperties": {
           "variableName": "logic_apps_body",
           "value": {
-            "value": "{\n\"subject\":\"@{variables('email_subject')}\",\n\"email_receipients\":\"@{pipeline().globalParameters.email_receipent}\",\n\"body_header\":\"@{variables('body_header')}\",\n\"body_footer\":\"@{variables('body_footer')}\",\n\"pipeline_statuses\": {\n  \"postgres_source_to_silver\": \"@{pipeline().parameters.postgres_status}\",\n  \"adls_csv_source_to_silver\": \"@{pipeline().parameters.adls_status}\",\n  \"gold_stage\": \"@{pipeline().parameters.gold_status}\"\n},\n\"status_table\": @{activity('Read All tables status').output.value}\n}",
+            "value": "{\n\"adf_run_id\":\"@{pipeline().parameters.adf_run_id}\",\n\"subject\":\"@{variables('email_subject')}\",\n\"email_receipients\":\"@{pipeline().globalParameters.email_receipent}\",\n\"body_header\":\"@{variables('body_header')}\",\n\"body_footer\":\"@{variables('body_footer')}\",\n\"pipeline_statuses\": {\n  \"postgres_source_to_silver\": \"@{pipeline().parameters.postgres_status}\",\n  \"adls_csv_source_to_silver\": \"@{pipeline().parameters.adls_status}\",\n  \"gold_stage\": \"@{pipeline().parameters.gold_status}\"\n},\n\"status_table\": @{activity('Read All tables status').output.value}\n}",
             "type": "Expression"
           }
         }
@@ -187,7 +187,8 @@
           "body": {
             "value": "@variables('logic_apps_body')",
             "type": "Expression"
-          }
+          },
+          "httpRequestTimeout": "00:02:00"
         }
       }
     ],
