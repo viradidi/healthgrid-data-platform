@@ -153,8 +153,13 @@ The current Landing-to-Bronze notebook appends rows and adds batch/insert timest
 | SLV-17 | Equal-version replay | Reprocess the same business payload with the same source version | Existing row remains unchanged; no duplicate is inserted |
 | SLV-18 | Equal-version conflict | Supply changed business values with the same key and source version | Notebook rejects the batch before MERGE |
 | SLV-19 | Invalid existing target | Seed duplicate/null target keys or null target versions | Notebook blocks MERGE and requires target reconciliation |
+| SLV-20 | Missing/invalid load strategy | Omit load_type or pass an unsupported value | Notebook fails closed; it never assumes FULL or overwrites Silver |
+| SLV-21 | Invalid table/batch identifier | Pass an unsafe table_name or landing_timestamp parameter | Notebook rejects the parameter before constructing Spark identifiers or batch filters |
+| SLV-22 | DATA/empty-batch mismatch | Pass landing_status=DATA while the selected Bronze batch has no rows | Notebook fails before Silver mutation and downstream checkpoint success |
+| SLV-23 | MERGE payload type drift | Change a non-version source column type while retaining the target schema | Notebook reports the mismatched column types and blocks MERGE before target mutation |
+| SLV-24 | Target column-name collision | Seed target columns that collide case-insensitively | Notebook blocks MERGE and requires schema reconciliation |
 
-The shared notebook receives the configured watermark column from active source metadata as its MERGE source-version field. MERGE rejects null or duplicate source keys, null source versions, invalid target keys, and incompatible target schemas. It updates a matched row only when the incoming version is strictly newer. Equal-version identical replays are no-ops; equal-version payload conflicts are rejected. Static CI checks enforce the code/configuration contract, while the Databricks-specific data scenarios above still require execution in a deployed workspace.
+The shared notebook receives the configured watermark column from active source metadata as its MERGE source-version field. MERGE rejects null or duplicate source keys, null source versions, invalid target keys, case-insensitive column-name collisions, and source/target column-name or data-type mismatches. It updates a matched row only when the incoming version is strictly newer. Equal-version identical business payloads are no-ops; equal-version payload conflicts are rejected. Missing/invalid load strategies fail closed rather than defaulting to FULL. Static CI checks enforce these code/configuration contracts and notebook Python syntax; the Databricks-specific data scenarios above still require execution in a deployed workspace.
 
 ## 7. Watermark and checkpoint tests
 
