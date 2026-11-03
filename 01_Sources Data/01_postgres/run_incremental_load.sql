@@ -1,12 +1,41 @@
 /* =====================================================================
-    CareSync Health Network - Incremental source load
-   Target: Neon Postgres (source system, schema: public)
+   HealthGrid — PostgreSQL incremental fixture, round 1
+   Target: PostgreSQL, schema public.
 
-    Inserts and updates hospitals, doctors, and patients.
-    The updated_at column is explicitly refreshed for every update.
+   One-time synthetic change set. The transaction/advisory lock and marker
+   guard prevent duplicate inserts or repeated additive updates on replay.
+   Run after create_source_tables.sql. Do not use as a production feed loader.
    ===================================================================== */
 
 BEGIN;
+SET LOCAL search_path TO public;
+SELECT pg_advisory_xact_lock(hashtext('healthgrid:incremental-fixture:round-1'));
+
+DO $healthgrid_round1_guard$
+BEGIN
+    IF to_regclass('public.hospitals') IS NULL
+       OR to_regclass('public.doctors') IS NULL
+       OR to_regclass('public.patients') IS NULL THEN
+        RAISE EXCEPTION 'HealthGrid source tables are missing; run the fresh source initializer first.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM public.hospitals
+        WHERE hospital_name = 'Riverside Specialty Hospital'
+          AND city = 'Nashville'
+          AND state = 'TN'
+    ) THEN
+        RAISE EXCEPTION 'HealthGrid incremental fixture round 1 was already applied; no rows were changed.';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.hospitals WHERE hospital_id = 1)
+       OR NOT EXISTS (SELECT 1 FROM public.doctors WHERE doctor_id = 1)
+       OR NOT EXISTS (SELECT 1 FROM public.patients WHERE patient_id = 1)
+       OR NOT EXISTS (SELECT 1 FROM public.patients WHERE patient_id = 2500) THEN
+        RAISE EXCEPTION 'Expected baseline hospital, doctor, and patient IDs are missing; reconcile the source baseline before applying this fixture.';
+    END IF;
+END;
+$healthgrid_round1_guard$;
 
 /* ---------------------------------------------------------------------
    1. Insert a new hospital and its doctors
