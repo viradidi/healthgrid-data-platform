@@ -279,7 +279,7 @@
               },
               "userProperties": [],
               "typeProperties": {
-                "variableName": "watermarl_value",
+                "variableName": "watermark_value",
                 "value": {
                   "value": "@activity('Read watermark').output.firstRow.watermark_value",
                   "type": "Expression"
@@ -412,7 +412,7 @@
                     "source": {
                       "type": "PostgreSqlV2Source",
                       "query": {
-                        "value": "SELECT * FROM \"@{activity('Read Table Details').output.firstRow.source_schema_name}\".\"@{activity('Read Table Details').output.firstRow.source_table_name}\"\n@{\n    if(equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),\n         '',\n         concat(\n            'WHERE \"',\n            activity('Read Table Details').output.firstRow.watermark_column,\n            '\" >= ',\n            '''',\n            formatDateTime(\n                addMinutes(\n                    variables('watermarl_value'),\n                    mul(-1, int(coalesce(activity('Read Table Details').output.firstRow.watermark_lookback_minutes, 0)))\n                ),\n                'yyyy-MM-ddTHH:mm:ss.ffffff'\n            ),\n            ''' AND \"',\n            activity('Read Table Details').output.firstRow.watermark_column,\n            '\" < ',\n            '''',\n            variables('watermark_upper_bound'),\n            ''''\n         )\n    )\n}",
+                        "value": "SELECT * FROM \"@{activity('Read Table Details').output.firstRow.source_schema_name}\".\"@{activity('Read Table Details').output.firstRow.source_table_name}\"\n@{\n    if(equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),\n         '',\n         concat(\n            'WHERE \"',\n            activity('Read Table Details').output.firstRow.watermark_column,\n            '\" >= ',\n            '''',\n            formatDateTime(\n                addMinutes(\n                    variables('watermark_value'),\n                    mul(-1, int(coalesce(activity('Read Table Details').output.firstRow.watermark_lookback_minutes, 0)))\n                ),\n                'yyyy-MM-ddTHH:mm:ss.ffffff'\n            ),\n            ''' AND \"',\n            activity('Read Table Details').output.firstRow.watermark_column,\n            '\" < ',\n            '''',\n            variables('watermark_upper_bound'),\n            ''''\n         )\n    )\n}",
                         "type": "Expression"
                       },
                       "queryTimeout": "02:00:00"
@@ -879,7 +879,7 @@
       "start_time": {
         "type": "String"
       },
-      "watermarl_value": {
+      "watermark_value": {
         "type": "String"
       },
       "watermark_upper_bound": {
