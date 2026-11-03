@@ -155,7 +155,7 @@ The control framework includes:
 - Success/failure status updates around notebook execution.
 - A notification pipeline that assembles run status information for a Logic Apps endpoint.
 
-**Orchestration gate:** the master pipeline starts Silver-to-Gold only when both source branches have `Succeeded`. The notification branch runs after Gold is `Completed` so it can report either outcome. The CSV manifest blocks automatic recopy of file versions left in an unresolved prior-run state.
+**Orchestration gate:** the master waits for both source branches to reach `Completed`, evaluates their actual `.Status` values, and invokes Silver-to-Gold only when both source branches have `Succeeded`. The notification pipeline runs after the Gold decision completes, including when a source failure causes Gold to be skipped. Its request carries the parent `adf_run_id`, three parent branch outcomes, and the ordered table-level audit rows. The [notification payload contract](docs/NOTIFICATION_CONTRACT.md) documents the producer schema and the external Logic Apps validation boundary. The CSV manifest blocks automatic recopy of file versions left in an unresolved prior-run state.
 
 ## Repository guide
 
@@ -180,6 +180,7 @@ The control framework includes:
 | [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
 | [CSV file ingestion manifest](docs/FILE_INGESTION_MANIFEST.md) | Per-file identity, manifest states, replay protection, and recovery procedure |
+| [Notification payload contract](docs/NOTIFICATION_CONTRACT.md) | ADF-to-Logic Apps request fields, status semantics, and external consumer validation |
 
 ## Repository validation
 
