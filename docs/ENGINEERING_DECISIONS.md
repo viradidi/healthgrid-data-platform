@@ -141,7 +141,11 @@ Source-to-Silver and Silver-to-Gold table loops use an idempotent `MERGE ... WIT
 
 ## 13. Security and data scope
 
-The checked-in data is synthetic and the project is educational. Credentials should be supplied through secure linked-service configuration and Azure Key Vault references, not committed in source control. Any real-world adaptation would require privacy, access-control, retention, encryption, audit, and regulatory controls appropriate to the jurisdiction and data classification.
+The checked-in data represents a simulated multi-site healthcare network. Patient, clinician, hospital, and laboratory-event records are synthetic; insurance-provider names in the sample feeds are fictional demo entities, and contact values use placeholder `.example` addresses. No real patient information, actual provider relationships, or clinical integrations are included.
+
+The Gold models are operational-analytics examples. The supplied `Normal`, `Abnormal`, and `Critical` statuses are synthetic input categories and are not clinical classifications validated for patient care. The platform must not be used for diagnosis, triage, treatment, or care decisions.
+
+Credentials should be supplied through secure linked-service configuration and Azure Key Vault references, not committed in source control. Any real-world adaptation would require separately designed privacy, access-control, retention, encryption, audit, data-quality, clinical-governance where applicable, and jurisdiction-specific regulatory controls.
 
 ## 14. Deployment and operational decisions
 
