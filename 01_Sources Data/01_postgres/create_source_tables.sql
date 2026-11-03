@@ -55,6 +55,23 @@ CREATE TABLE patients (
     updated_at               TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW())
 );
 
+-- Keep the patient watermark reliable even when a writer omits updated_at.
+CREATE OR REPLACE FUNCTION public.set_patients_updated_at_utc()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $
+BEGIN
+    NEW.updated_at := timezone('UTC', clock_timestamp());
+    RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS trg_patients_updated_at_utc ON patients;
+CREATE TRIGGER trg_patients_updated_at_utc
+BEFORE UPDATE ON patients
+FOR EACH ROW
+EXECUTE FUNCTION public.set_patients_updated_at_utc();
+
 /* =====================================================================
    Seed data — set-based generation (no giant literal INSERT lists)
    Target volumes: ~50 hospitals, ~10 doctors/hospital (~500), ~100
