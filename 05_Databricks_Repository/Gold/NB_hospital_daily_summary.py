@@ -73,8 +73,6 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Return hos# COMMAND ----------
-
 # DBTITLE 1,Validate hospital daily summary output contract
 from pyspark.sql import functions as F
 
