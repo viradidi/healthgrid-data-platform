@@ -48,9 +48,11 @@ jobs:
         run: |
           python - <<'PY'
           import ast
+          import csv
           import json
           import re
           import sys
+          from datetime import date, datetime
           from pathlib import Path
 
           errors = []
@@ -117,6 +119,7 @@ jobs:
               "docs/DEPLOYMENT.md",
               "docs/ARTIFACT_AUDIT.md",
               "docs/FILE_INGESTION_MANIFEST.md",
+              "docs/SOURCE_FIXTURE_CONTRACT.md",
               "docs/NOTIFICATION_CONTRACT.md",
           ]
           for name in required_docs:
@@ -260,6 +263,147 @@ jobs:
                       errors.append(f"Audit-key migration is missing a duplicate/index-definition safeguard: {required}")
               if re.search(r"\\b(DELETE\\s+FROM|TRUNCATE\\s+TABLE)\\s+ctrl\\.audit_log", audit_migration, re.I):
                   errors.append("Audit-key migration must never delete or truncate audit history.")
+
+
+          # Source fixture content, cardinality, replay guards, and configured strategy.
+          def read_csv_fixture(path):
+              try:
+                  with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                      reader = csv.DictReader(handle)
+                      if not reader.fieldnames:
+                          errors.append(f"CSV fixture has no header: {path}")
+                          return []
+                      return list(reader)
+              except Exception as exc:
+                  errors.append(f"Unable to parse CSV fixture {path}: {exc}")
+                  return []
+
+          initial_lab_path = Path("01_Sources Data/02_adls_csv/Initial_laod/lab_results_2026_09_14_1329.csv")
+          incremental_lab_path = Path("01_Sources Data/02_adls_csv/Incremental_load/lab_results_2026_09_14_1440.csv")
+          initial_provider_path = Path("01_Sources Data/02_adls_csv/Initial_laod/insurance_providers.csv")
+          incremental_provider_path = Path("01_Sources Data/02_adls_csv/Incremental_load/insurance_providers.csv")
+          round1_sql_path = Path("01_Sources Data/01_postgres/run_incremental_load.sql")
+          round2_sql_path = Path("01_Sources Data/01_postgres/run_incremental_load_round_2.sql")
+          fixture_contract_path = Path("docs/SOURCE_FIXTURE_CONTRACT.md")
+
+          fixture_paths = (
+              initial_lab_path, incremental_lab_path,
+              initial_provider_path, incremental_provider_path,
+              round1_sql_path, round2_sql_path, fixture_contract_path,
+          )
+          for path in fixture_paths:
+              if not path.is_file():
+                  errors.append(f"Required source fixture asset missing: {path}")
+
+          if all(path.is_file() for path in fixture_paths):
+              initial_lab = read_csv_fixture(initial_lab_path)
+              incremental_lab = read_csv_fixture(incremental_lab_path)
+              initial_providers = read_csv_fixture(initial_provider_path)
+              incremental_providers = read_csv_fixture(incremental_provider_path)
+              round1_sql = round1_sql_path.read_text(encoding="utf-8")
+              round2_sql = round2_sql_path.read_text(encoding="utf-8")
+              fixture_contract = fixture_contract_path.read_text(encoding="utf-8")
+              required_lab_columns = {
+                  "lab_result_id", "patient_id", "hospital_id", "doctor_id",
+                  "test_name", "test_date", "result_value", "result_unit",
+                  "result_status", "reported_at",
+              }
+              required_provider_columns = {
+                  "insurance_provider_id", "provider_name", "provider_type",
+                  "contact_email", "coverage_region",
+              }
+
+              for path, rows, expected_columns in (
+                  (initial_lab_path, initial_lab, required_lab_columns),
+                  (incremental_lab_path, incremental_lab, required_lab_columns),
+                  (initial_provider_path, initial_providers, required_provider_columns),
+                  (incremental_provider_path, incremental_providers, required_provider_columns),
+              ):
+                  with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                      header = set(next(csv.reader(handle), []))
+                  if header != expected_columns:
+                      errors.append(f"CSV fixture header does not match the expected source schema: {path}")
+
+              def numeric_ids(rows, field, label):
+                  try:
+                      values = [int(row[field]) for row in rows]
+                  except (KeyError, TypeError, ValueError):
+                      errors.append(f"{label} contains a missing or non-integer {field}.")
+                      return []
+                  if len(values) != len(set(values)):
+                      errors.append(f"{label} contains duplicate {field} values.")
+                  return values
+
+              initial_lab_ids = numeric_ids(initial_lab, "lab_result_id", "Initial lab fixture")
+              incremental_lab_ids = numeric_ids(incremental_lab, "lab_result_id", "Incremental lab fixture")
+              if len(initial_lab) != 8228 or initial_lab_ids != list(range(1, 8229)):
+                  errors.append("Initial lab fixture must contain 8,228 rows with contiguous lab_result_id values 1-8,228.")
+              if len(incremental_lab) != 20 or incremental_lab_ids != list(range(8229, 8249)):
+                  errors.append("Incremental lab fixture must contain 20 new rows with contiguous lab_result_id values 8,229-8,248.")
+              combined_lab_ids = initial_lab_ids + incremental_lab_ids
+              if len(combined_lab_ids) != 8248 or len(set(combined_lab_ids)) != 8248:
+                  errors.append("Initial and incremental lab fixtures must combine to 8,248 unique event IDs.")
+
+              for label, rows in (("Initial lab fixture", initial_lab), ("Incremental lab fixture", incremental_lab)):
+                  for row in rows:
+                      try:
+                          if not 1 <= int(row["patient_id"]) <= 5000:
+                              raise ValueError("patient_id outside 1-5000")
+                          if not 1 <= int(row["hospital_id"]) <= 50:
+                              raise ValueError("hospital_id outside 1-50")
+                          if not 1 <= int(row["doctor_id"]) <= 500:
+                              raise ValueError("doctor_id outside 1-500")
+                          if row["result_status"] not in {"Normal", "Abnormal", "Critical"}:
+                              raise ValueError("unsupported result_status")
+                          date.fromisoformat(row["test_date"])
+                          datetime.fromisoformat(row["reported_at"])
+                      except (KeyError, TypeError, ValueError) as exc:
+                          errors.append(f"{label} has an invalid reference, status, or ISO date/time: {exc}")
+                          break
+
+              initial_provider_ids = numeric_ids(initial_providers, "insurance_provider_id", "Initial provider fixture")
+              incremental_provider_ids = numeric_ids(incremental_providers, "insurance_provider_id", "Incremental provider fixture")
+              if len(initial_providers) != 25 or initial_provider_ids != list(range(1, 26)):
+                  errors.append("Initial insurance-provider fixture must be a complete 25-row snapshot with IDs 1-25.")
+              if len(incremental_providers) != 30 or incremental_provider_ids != list(range(1, 31)):
+                  errors.append("Incremental insurance-provider fixture must be a complete 30-row snapshot with IDs 1-30.")
+              for label, rows in (("Initial provider fixture", initial_providers), ("Incremental provider fixture", incremental_providers)):
+                  for row in rows:
+                      if "Demo" not in row["provider_name"] or not row["contact_email"].endswith(".example"):
+                          errors.append(f"{label} must use fictional Demo names and reserved .example contact addresses.")
+                          break
+
+              if not {"3", "8", "14", "21"}.issubset(set(incremental_provider_ids)):
+                  errors.append("Later provider snapshot must include IDs referenced by the round-2 patient fixture.")
+
+              control_seed = Path("02_Metadata Table Queries/create_control_tables.sql").read_text(encoding="utf-8")
+              if not re.search(r"\('adls_csv', NULL, 'lab_results'.*?'APPEND'", control_seed, re.S):
+                  errors.append("lab_results must remain configured as APPEND for additive event-file delivery.")
+              if not re.search(r"\('adls_csv', NULL, 'insurance_providers'.*?'FULL'", control_seed, re.S):
+                  errors.append("insurance_providers must remain configured as FULL for complete replacement snapshots.")
+
+              for label, sql, round_marker in (
+                  ("round 1", round1_sql, "Riverside Specialty Hospital"),
+                  ("round 2", round2_sql, "Lakeside Community Hospital"),
+              ):
+                  advisory_key = "healthgrid:incremental-fixture:" + ("round-1" if label == "round 1" else "round-2")
+                  if not all(token in sql for token in ("BEGIN;", "SET LOCAL search_path TO public;", "pg_advisory_xact_lock", advisory_key, "DO $healthgrid_", "RAISE EXCEPTION", round_marker, "COMMIT;")):
+                      errors.append(f"PostgreSQL incremental fixture {label} is missing its transaction, advisory lock, or replay guard.")
+                  guard_end = sql.find("$healthgrid_" + ("round1_guard$;" if label == "round 1" else "round2_guard$;"))
+                  first_dml = sql.find("WITH new_hospital AS")
+                  if guard_end < 0 or first_dml < 0 or guard_end > first_dml:
+                      errors.append(f"PostgreSQL incremental fixture {label} must complete its precondition guard before data-changing statements.")
+                  if "CareSync" in sql:
+                      errors.append(f"PostgreSQL incremental fixture {label} contains a stale CareSync identifier.")
+
+              for required in (
+                  "20 new events with IDs 8,229–8,248",
+                  "complete 25-provider snapshot",
+                  "complete 30-provider snapshot",
+                  "the later file replaces the reference snapshot",
+              ):
+                  if required not in fixture_contract:
+                      errors.append(f"Source fixture contract documentation is missing a verified fixture rule: {required}")
 
           # Static contract checks for the metadata-driven ADLS CSV file manifest.
           pipeline_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
