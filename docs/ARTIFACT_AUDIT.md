@@ -31,7 +31,7 @@ This is a static review of the committed implementation and documentation. It is
 
 All layers are metadata-driven. Shared control metadata configures source objects, active status, source and target identifiers, load strategy, watermark information, merge keys, and processing stage.
 
-- Source-to-Silver processing uses active SOURCE_TO_SILVER records in ctrl.table_config.
+- Source-to-Silver processing uses active SOURCE_TO_SILVER records in ctrl.table_config. The main dispatcher allow-lists source systems; the inner pipeline accepts a positive integer table_id, rechecks active stage scope, and validates source-specific required metadata before Copy.
 - Gold orchestration selects active SILVER_TO_GOLD records and resolves notebook paths dynamically using gold_table_name.
 - Dataset-specific analytical transformation SQL remains in the corresponding Databricks notebooks.
 
@@ -48,6 +48,7 @@ Metadata drives the end-to-end framework and execution/selection; the individual
 | docs/VALIDATION_PLAN.md | Metadata, ADF, Bronze, Silver, watermark, audit, and Gold test scenarios |
 | docs/DEPLOYMENT.md | Environment inventory, secure configuration, deployment, rollback, and cost cleanup |
 | docs/SOURCE_FIXTURE_CONTRACT.md | PostgreSQL fixture sequence and row-count expectations, CSV append/snapshot semantics, replay rules, and runtime evidence |
+| docs/ADF_SOURCE_EXTRACTION_CONTRACT.md | ADF metadata validation, safe PostgreSQL query construction, watermark and checkpoint rules, landing hand-off, and runtime evidence |
 | docs/NOTIFICATION_CONTRACT.md | ADF producer payload, parent status semantics, Logic Apps compatibility boundary, and delivery limitations |
 
 ## Findings and actions
@@ -68,7 +69,7 @@ The ADF producer payload is documented in `docs/NOTIFICATION_CONTRACT.md`. The L
 
 - Landing-to-Bronze appends batches and blocks exact landing-timestamp replay. The CSV branch now tracks file versions through `ctrl.file_ingestion_manifest`; unresolved prior-run IN_PROGRESS/COPIED states require reconciliation. Revised whole-file snapshots can still duplicate rows under APPEND.
 - Silver MERGE receives the configured `watermark_column` as its DATE/TIMESTAMP source-version field. It rejects null/duplicate source keys, null source versions, invalid target keys, and schema mismatches; older versions cannot overwrite newer rows, identical equal-version replays are no-ops, and equal-version payload conflicts fail for reconciliation. Runtime data scenarios remain part of the redeployment validation plan.
-- PostgreSQL incremental extraction now uses a metadata-configured lookback, a fixed UTC upper bound captured at run start, inclusive/exclusive query boundaries, and monotonic checkpoint advancement after Silver succeeds. The patients row is seeded with a five-minute lookback and its `updated_at` source timestamps are normalized to UTC by the supplied PostgreSQL SQL. The patient update trigger refreshes the timestamp for every UPDATE, including source statements that omit `updated_at`.
+- PostgreSQL incremental extraction now uses a metadata-configured lookback, a fixed UTC upper bound captured at run start, inclusive/exclusive query boundaries, and monotonic checkpoint advancement after Silver succeeds. The ADF export validates that an incremental checkpoint exists and converts to DATETIME2(6) before Copy, quotes metadata-driven PostgreSQL identifiers with embedded-quote escaping, escapes run IDs used in SQL literals, and requires exactly one checkpoint row to update. The patients row is seeded with a five-minute lookback and its `updated_at` source timestamps are normalized to UTC by the supplied PostgreSQL SQL. The patient update trigger refreshes the timestamp for every UPDATE, including source statements that omit `updated_at`.
 - The lookback reduces short visibility-delay and backdating risk but does not provide CDC or no-loss guarantees. Hard deletes are not captured; changes outside the lookback or changes that fail to update `updated_at` can still be missed. Runtime boundary/concurrency scenarios remain unexecuted until Azure is restored.
 - CSV source selection is file-manifest-based, with content MD5 optional.
 - Audit rows are unique by `(adf_run_id, table_id, stage)`; source and Gold starts use idempotent HOLDLOCK upserts and finalizers scope updates by stage. Retries update the single summary record; ADF history preserves individual attempt details.
