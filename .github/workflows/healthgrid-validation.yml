@@ -298,6 +298,21 @@ jobs:
                   errors.append("PostgreSQL source DDL must define UTC timestamp defaults for source watermark fields.")
               if "CREATE TRIGGER trg_patients_updated_at_utc" not in source_ddl or "clock_timestamp()" not in source_ddl:
                   errors.append("PostgreSQL source DDL must install the UTC patients updated_at trigger.")
+              if source_ddl.count("$healthgrid$") != 2 or "AS $healthgrid$\\nBEGIN" not in source_ddl or "\\n$healthgrid$;" not in source_ddl:
+                  errors.append("PostgreSQL source DDL must use a complete tagged dollar-quoted PL/pgSQL trigger body.")
+
+              provider_files = [
+                  Path("01_Sources Data/02_adls_csv/Initial_laod/insurance_providers.csv"),
+                  Path("01_Sources Data/02_adls_csv/Incremental_load/insurance_providers.csv"),
+              ]
+              for provider_file in provider_files:
+                  if not provider_file.is_file():
+                      errors.append(f"Missing synthetic provider fixture: {provider_file}")
+                      continue
+                  rows = [line.split(",") for line in provider_file.read_text(encoding="utf-8").splitlines()[1:] if line.strip()]
+                  if not rows or any(len(row) < 4 or "Demo" not in row[1] or not row[3].lower().endswith(".example") for row in rows):
+                      errors.append(f"Provider fixture must use fictional Demo names and placeholder .example contacts: {provider_file}")
+
               trigger_migration_path = Path("01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql")
               if not trigger_migration_path.is_file():
                   errors.append("Existing PostgreSQL source databases require the non-destructive patient timestamp-trigger migration.")
