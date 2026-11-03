@@ -298,6 +298,13 @@ jobs:
                   errors.append("PostgreSQL source DDL must define UTC timestamp defaults for source watermark fields.")
               if "CREATE TRIGGER trg_patients_updated_at_utc" not in source_ddl or "clock_timestamp()" not in source_ddl:
                   errors.append("PostgreSQL source DDL must install the UTC patients updated_at trigger.")
+              trigger_migration_path = Path("01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql")
+              if not trigger_migration_path.is_file():
+                  errors.append("Existing PostgreSQL source databases require the non-destructive patient timestamp-trigger migration.")
+              else:
+                  trigger_migration = trigger_migration_path.read_text(encoding="utf-8")
+                  if "CREATE TRIGGER trg_patients_updated_at_utc" not in trigger_migration or "timezone('UTC', clock_timestamp())" not in trigger_migration:
+                      errors.append("Patient timestamp-trigger migration must install the UTC updated_at trigger.")
 
               # Checkpoint advancement must remain downstream of successful Silver processing.
               processed_activity = by_name.get("Mark File Manifest Processed", {})
