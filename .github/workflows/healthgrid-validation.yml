@@ -230,6 +230,21 @@ jobs:
               for label, required in required_silver_contracts.items():
                   if required not in silver_source:
                       errors.append(f"Silver MERGE contract is missing {label}.")
+              additional_silver_contracts = {
+                  "fail-closed load strategy validation": 'normalized_load_type not in {"FULL", "APPEND", "MERGE"}',
+                  "no implicit FULL fallback": 'normalized_load_type = (load_type or "").strip().upper()',
+                  "landing status validation": 'normalized_landing_status != "DATA"',
+                  "table identifier validation": 're.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name or "")',
+                  "landing batch identifier validation": 're.fullmatch(r"[A-Za-z0-9_-]{1,160}", landing_timestamp or "")',
+                  "unexpected empty Bronze batch rejection": "bronze_df.limit(1).count() == 0",
+                  "case-insensitive target schema collision guard": "column names that collide case-insensitively",
+                  "MERGE payload data-type validation": "type_mismatches",
+              }
+              for label, required in additional_silver_contracts.items():
+                  if required not in silver_source:
+                      errors.append(f"Silver notebook is missing {label}.")
+              if 'normalized_load_type = (load_type or "FULL").strip().upper()' in silver_source:
+                  errors.append("Silver notebook must not default missing load_type metadata to FULL.")
               if "> target." not in silver_source:
                   errors.append("Silver MERGE must update matched rows only when the incoming source version is newer.")
               if "target schema does not match" not in silver_source.lower():
