@@ -4,12 +4,12 @@
 		"annotations": [],
 		"type": "AzureSqlDatabase",
 		"typeProperties": {
-			"server": "caresync-server.database.windows.net",
-			"database": "sql-db-caresync",
+			"server": "<sql-server-name>.database.windows.net",
+			"database": "<control-database-name>",
 			"encrypt": "mandatory",
 			"trustServerCertificate": false,
 			"authenticationType": "SQL",
-			"userName": "databeli",
+			"userName": "<sql-username>",
 			"password": {
 				"type": "AzureKeyVaultSecret",
 				"store": {
