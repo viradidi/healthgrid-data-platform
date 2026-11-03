@@ -3,15 +3,15 @@
 # MAGIC %md
 # MAGIC # NB_patient_360
 # MAGIC
-# MAGIC Builds `adb_caresync.gold.patient_360` from the silver patient, hospital, insurance, and lab result tables defined in the STTM workbook, then validates the output schema and sample rows.
+# MAGIC Builds `healthgrid.gold.patient_360` from the silver patient, hospital, insurance, and lab result tables defined in the STTM workbook, then validates the output schema and sample rows.
 
 # COMMAND ----------
 
 # DBTITLE 1,Create patient 360 gold table
 # MAGIC %sql
-# MAGIC CREATE SCHEMA IF NOT EXISTS adb_caresync.gold;
+# MAGIC CREATE SCHEMA IF NOT EXISTS healthgrid.gold;
 # MAGIC
-# MAGIC CREATE OR REPLACE TABLE adb_caresync.gold.patient_360 AS
+# MAGIC CREATE OR REPLACE TABLE healthgrid.gold.patient_360 AS
 # MAGIC WITH lab_results_agg AS (
 # MAGIC   SELECT
 # MAGIC     patient_id,
@@ -19,7 +19,7 @@
 # MAGIC     CAST(SUM(CASE WHEN result_status = 'Abnormal' THEN 1 ELSE 0 END) AS INT) AS abnormal_test_count,
 # MAGIC     CAST(SUM(CASE WHEN result_status = 'Critical' THEN 1 ELSE 0 END) AS INT) AS critical_test_count,
 # MAGIC     MAX(test_date) AS last_test_date
-# MAGIC   FROM adb_caresync.silver.lab_results
+# MAGIC   FROM healthgrid.silver.lab_results
 # MAGIC   GROUP BY patient_id
 # MAGIC )
 # MAGIC SELECT
@@ -39,10 +39,10 @@
 # MAGIC   COALESCE(lra.abnormal_test_count, 0) AS abnormal_test_count,
 # MAGIC   COALESCE(lra.critical_test_count, 0) AS critical_test_count,
 # MAGIC   lra.last_test_date
-# MAGIC FROM adb_caresync.silver.patients AS p
-# MAGIC LEFT JOIN adb_caresync.silver.hospitals AS h
+# MAGIC FROM healthgrid.silver.patients AS p
+# MAGIC LEFT JOIN healthgrid.silver.hospitals AS h
 # MAGIC   ON p.registered_hospital_id = h.hospital_id
-# MAGIC LEFT JOIN adb_caresync.silver.insurance_providers AS ip
+# MAGIC LEFT JOIN healthgrid.silver.insurance_providers AS ip
 # MAGIC   ON p.insurance_provider_id = ip.insurance_provider_id
 # MAGIC LEFT JOIN lab_results_agg AS lra
 # MAGIC   ON p.patient_id = lra.patient_id;
@@ -50,6 +50,6 @@
 # COMMAND ----------
 
 # DBTITLE 1,Return patient 360 record count
-updated_df = spark.table("adb_caresync.gold.patient_360")
+updated_df = spark.table("healthgrid.gold.patient_360")
 record_count = updated_df.count()
 dbutils.notebook.exit(str(record_count))
