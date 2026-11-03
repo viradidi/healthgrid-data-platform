@@ -81,6 +81,8 @@ The repository also contains a recipient address in exported factory configurati
 
 - Provision a new disposable PostgreSQL source database for the synthetic fixtures. Run `01_Sources Data/01_postgres/create_source_tables.sql` for a fresh source. It creates and seeds `public.hospitals`, `public.doctors`, and `public.patients` only when none already exists; it contains no table-drop operation and fails closed when any target table exists.
 - Load only the intended synthetic source fixtures. Do not use the initial create script as a refresh operation.
+- Apply the two PostgreSQL incremental fixture scripts only once, in the documented round-1 then round-2 sequence, after reviewing the [Source Fixture Contract](SOURCE_FIXTURE_CONTRACT.md). Each script now fails on replay and verifies its baseline prerequisites.
+- Upload the initial and later CSV fixtures as separate file versions. The lab-results later file is a 20-row APPEND delivery; the later insurance-provider file is a complete 30-row FULL snapshot, not a five-row delta.
 - For an existing PostgreSQL `patients` table, run `01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql`; this migration replaces the trigger definition without dropping patient rows.
 - Verify the PostgreSQL `trg_patients_updated_at_utc` trigger exists and updates `patients.updated_at` when a patient row changes without an explicit timestamp assignment.
 - Provision Azure SQL Database. Run `02_Metadata Table Queries/create_control_tables.sql` only for a fresh control database. It creates and seeds the four control tables, refuses to run when any target table already exists, and uses a session gate across its GO-separated batches so later statements remain blocked when the preflight fails.
