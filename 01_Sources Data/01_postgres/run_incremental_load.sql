@@ -27,8 +27,8 @@ WITH new_hospital AS (
         'TN',
         'Specialty',
         220,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
+        timezone('UTC', CURRENT_TIMESTAMP),
+        timezone('UTC', CURRENT_TIMESTAMP)
     )
     RETURNING hospital_id
 )
@@ -47,8 +47,8 @@ SELECT
     doctor.specialty,
     new_hospital.hospital_id,
     doctor.phone_number,
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
+    timezone('UTC', CURRENT_TIMESTAMP),
+    timezone('UTC', CURRENT_TIMESTAMP)
 FROM new_hospital
 CROSS JOIN (VALUES
     ('Sophia', 'Mitchell', 'Cardiology', '555-9001'),
@@ -62,14 +62,14 @@ UPDATE hospitals
 SET
     bed_count = bed_count + 25,
     hospital_type = 'Regional',
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE hospital_id = 1;
 
 UPDATE doctors
 SET
     specialty = 'Emergency Medicine',
     phone_number = '555-0101',
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE doctor_id = 1;
 
 /* ---------------------------------------------------------------------
@@ -95,8 +95,8 @@ VALUES
         'Austin',
         'TX',
         1,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
+        timezone('UTC', CURRENT_TIMESTAMP),
+        timezone('UTC', CURRENT_TIMESTAMP)
     ),
     (
         'Noah',
@@ -106,8 +106,8 @@ VALUES
         'Dallas',
         'TX',
         2,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
+        timezone('UTC', CURRENT_TIMESTAMP),
+        timezone('UTC', CURRENT_TIMESTAMP)
     ),
     (
         'Mia',
@@ -117,8 +117,8 @@ VALUES
         'Denver',
         'CO',
         7,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
+        timezone('UTC', CURRENT_TIMESTAMP),
+        timezone('UTC', CURRENT_TIMESTAMP)
     );
 
 /* ---------------------------------------------------------------------
@@ -129,7 +129,7 @@ SET
     city = 'Houston',
     state = 'TX',
     registered_hospital_id = 3,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE patient_id = 1;
 
 UPDATE patients
@@ -138,7 +138,7 @@ SET
     city = 'Seattle',
     state = 'WA',
     registered_hospital_id = 8,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE patient_id = 2500;
 
 COMMIT;
