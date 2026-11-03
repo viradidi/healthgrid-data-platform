@@ -73,7 +73,6 @@ if orphan_provider_refs:
     raise ValueError("patients contains insurance_provider_id values missing from the Silver partner feed.")
 
 # COMMAND ----------
-# COMMAND ----------
 
 # DBTITLE 1,Create patient 360 gold table
 # MAGIC %sql
