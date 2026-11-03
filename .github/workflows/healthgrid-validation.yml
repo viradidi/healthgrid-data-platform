@@ -506,8 +506,6 @@ jobs:
                   errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
               if 'reason == "No landing data files found for this batch."' not in landing_source:
                   errors.append("Landing notebook must preserve FULL CSV no-new-version NO_DATA semantics after file filtering.")
-                  errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
-
               # Static Landing-to-Bronze batch, metadata, and schema contracts.
               required_landing_contracts = {
                   "blank load_type widget default": 'dbutils.widgets.text("load_type", "")',
@@ -556,6 +554,9 @@ jobs:
               bronze_to_silver = by_name.get("Bronze to Silver", {})
               silver_parameters = bronze_to_silver.get("typeProperties", {}).get("baseParameters", {})
               expected_version_parameter = "@coalesce(activity('Read Table Details').output.firstRow.watermark_column,'')"
+              expected_landing_status_parameter = "@activity('Landing to Bronze').output.runOutput"
+              if silver_parameters.get("landing_status", {}).get("value") != expected_landing_status_parameter:
+                  errors.append("ADF must pass the Landing-to-Bronze DATA/NO_DATA result explicitly to Bronze-to-Silver.")
               if silver_parameters.get("source_version_column", {}).get("value") != expected_version_parameter:
                   errors.append("ADF must pass table_config.watermark_column to the Silver MERGE source-version widget.")
               required_silver_contracts = {
@@ -576,6 +577,9 @@ jobs:
                   "fail-closed load strategy validation": 'normalized_load_type not in {"FULL", "APPEND", "MERGE"}',
                   "no implicit FULL fallback": 'normalized_load_type = (load_type or "").strip().upper()',
                   "landing status validation": 'normalized_landing_status != "DATA"',
+                  "blank landing status widget default": 'dbutils.widgets.text("landing_status", "")',
+                  "NO_DATA short-circuit": 'if normalized_landing_status == "NO_DATA":',
+                  "NO_DATA output count": 'dbutils.notebook.exit("0")',
                   "table identifier validation": 're.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name or "")',
                   "landing batch identifier validation": 're.fullmatch(r"[A-Za-z0-9_-]{1,160}", landing_timestamp or "")',
                   "unexpected empty Bronze batch rejection": "bronze_df.limit(1).count() == 0",
