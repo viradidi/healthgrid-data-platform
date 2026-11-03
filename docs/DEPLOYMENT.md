@@ -1,6 +1,6 @@
 # HealthGrid — Deployment and Environment Guide
 
-This guide describes how to restore or redeploy the completed HealthGrid platform in a new Azure environment. The project was originally developed as CareSync and was historically executed end-to-end successfully. Some Azure resources were later decommissioned to control cost; legacy CareSync identifiers remain in exported artifacts.
+This guide describes how to restore or redeploy the completed HealthGrid platform in a new Azure environment. The project was originally developed as CareSync and was successfully executed end-to-end in its original Azure environment. Some cloud resources were later decommissioned to control cost. The repository now uses HealthGrid naming conventions; Azure endpoints, database/user values, workspace URL, and cluster ID in linked-service exports are deployment placeholders that must be supplied for a restored environment.
 
 The original architecture diagram is intentionally preserved. This guide does not require or authorize changes to assets/architecture-overview.png.
 
@@ -10,7 +10,7 @@ The original architecture diagram is intentionally preserved. This guide does no
 - Provision resources in a disposable development environment first.
 - Use synthetic data; do not load real patient information into this educational project.
 - Keep credentials, tokens, signed webhook URLs, and connection strings out of Git.
-- Align legacy CareSync resource names with the target environment through configuration and deployment-time updates. Do not perform blind global replacements.
+- Replace the explicit linked-service placeholders with values from the target Azure environment. The `healthgrid` catalog and `/Shared/HealthGrid/` notebook paths are the repository's canonical names; change them only when updating notebooks, ADF references, and documentation together.
 - Validate the complete path from source extraction to Gold output before enabling schedules.
 - Use VALIDATION_PLAN.md as the deployment acceptance specification.
 
@@ -27,7 +27,7 @@ The original architecture diagram is intentionally preserved. This guide does no
 | Azure Key Vault | Secret storage for linked services | Vault URI, secret names, managed identity access |
 | Logic Apps endpoint | Pipeline status notification | New endpoint URL stored securely; request schema and authorization |
 
-The exported linked services contain legacy workspace, cluster, and Key Vault references. Recreate or map these to the target environment. Do not assume the original resources still exist.
+The linked-service JSON files contain deployment placeholders for Key Vault, ADLS Gen2, Azure SQL, the Databricks workspace, and the Databricks cluster. Populate each value for the target environment before publishing; do not assume the original cloud resources still exist.
 
 ## 3. Security prerequisite — exposed notification credential
 
@@ -46,19 +46,19 @@ The repository also contains a recipient address in exported factory configurati
 
 | Setting | Exported implementation | Target environment action |
 |---|---|---|
-| ADF factory | Legacy name adf-caresync | Choose target name and update references |
+| ADF factory | `adf-healthgrid` | Confirm the deployed factory name and linked-service references |
 | ADF region | centralindia | Select approved region and confirm availability |
 | ADF publish branch | adf_publish | Configure repository integration and publish branch |
 | ADF environment parameter | DEV | Set target environment explicitly |
 | PostgreSQL schema | public | Confirm source schema and table names |
 | Control schema | ctrl | Create control objects in target Azure SQL database |
 | Storage containers | source, landing | Create containers and grant required access |
-| Databricks catalog | adb_caresync | Create/map target catalog; update notebook references consistently |
-| Landing Volume | adb_caresync.landing.landing_volume | Create Volume and verify notebook identity access |
-| Databricks notebook paths | /caresync-repo/caresync-adb-repo/... | Import notebooks and update ADF paths |
-| Databricks compute | Existing cluster ID in export | Select supported target compute; do not reuse old ID |
-| Key Vault | Legacy CareSync vault URI | Create/select target vault and grant ADF identity access |
-| Notification | Exported Logic Apps global parameter | Create new endpoint and inject securely |
+| Databricks catalog | `healthgrid` | Create the catalog and required schemas before running notebooks |
+| Landing Volume | `healthgrid.landing.landing_volume` | Create the Volume and verify notebook identity access |
+| Databricks notebook paths | `/Shared/HealthGrid/...` | Import notebooks to these workspace paths or update ADF references consistently |
+| Databricks compute | `<existing-cluster-id>` placeholder | Select supported target compute and replace the placeholder |
+| Key Vault | `https://<key-vault-name>.vault.azure.net/` | Set the target vault URL and grant ADF identity access |
+| Linked-service endpoints | Explicit placeholders in linked-service JSON | Populate ADLS account, Azure SQL server/database/username, and Databricks workspace URL before publishing |
 | Email recipient | Exported factory parameter | Configure approved recipient securely |
 
 ## 5. Deployment sequence
@@ -96,14 +96,14 @@ Review setup scripts before execution; do not run destructive reset/drop scripts
 ### D3 — Provision Databricks and Unity Catalog
 
 - Create/select workspace and supported compute.
-- Configure Unity Catalog and create target catalog plus bronze, silver, and gold schemas.
-- Create the landing Volume used by Landing-to-Bronze.
+- Configure Unity Catalog and create catalog `healthgrid` with `landing`, `bronze`, `silver`, and `gold` schemas.
+- Create the `healthgrid.landing.landing_volume` Volume used by Landing-to-Bronze.
 - Import notebooks from 05_Databricks_Repository/.
-- Update legacy notebook paths and catalog references for the target environment.
+- Confirm notebooks are imported under `/Shared/HealthGrid/` and that their `healthgrid` catalog references match the target Unity Catalog setup.
 - Run the calendar preparation notebook and validate its date range.
 - Confirm permissions to read landing files and create/replace Delta tables.
 
-The notebooks currently reference legacy adb_caresync catalog and a CareSync landing Volume. Update these references coherently; a partial rename can leave the pipeline writing to and reading from different catalogs.
+The notebooks use the `healthgrid` catalog and `healthgrid.landing.landing_volume`. Create these Unity Catalog objects before execution; if you choose different names, update all notebooks, ADF paths, and deployment settings consistently.
 
 ### D4 — Configure Key Vault and linked services
 
@@ -204,7 +204,7 @@ The current implementation advances incremental watermarks to current UTC time, 
 | Gold rebuild | Confirm CREATE OR REPLACE behavior and recovery after failure |
 | Parallelism | Validate ForEach concurrency and prevent overlapping writes |
 | Audit | Verify one unique row per parent run/table/stage, idempotent start upserts, and stage-scoped status updates |
-| Legacy names | Standardize catalog, workspace, Volume, and notebook references coherently |
+| Deployment placeholders | Confirm all linked-service endpoints, workspace URL, cluster ID, database, and username are populated for the target environment |
 
 ## 8. Rollback and recovery
 
