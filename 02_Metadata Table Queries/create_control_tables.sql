@@ -30,6 +30,8 @@ CREATE TABLE ctrl.table_config (
     gold_table_name      VARCHAR(200)  NULL,
     load_type            VARCHAR(20)   NOT NULL CHECK (load_type IN ('FULL','APPEND','MERGE')),
     watermark_column     VARCHAR(100)  NULL,        -- timestamp extraction field for timestamp-watermarked sources; ADLS CSV uses the file manifest
+    watermark_lookback_minutes INT NOT NULL CONSTRAINT DF_table_config_watermark_lookback_minutes DEFAULT (0)
+        CONSTRAINT CK_table_config_watermark_lookback_minutes CHECK (watermark_lookback_minutes >= 0),
     merge_keys           VARCHAR(200)  NULL,        -- comma-separated business key(s); required only when load_type = MERGE
     stage                VARCHAR(20)   NOT NULL CHECK (stage IN ('SOURCE_TO_SILVER','SILVER_TO_GOLD')),
     is_active             BIT           NOT NULL DEFAULT 1,
@@ -113,12 +115,12 @@ GO
 INSERT INTO ctrl.table_config
     (source_system, source_schema_name, source_table_name, source_file_format, source_path,
      bronze_table_name, silver_table_name, gold_table_name,
-     load_type, watermark_column, merge_keys, stage, is_active)
+     load_type, watermark_column, watermark_lookback_minutes, merge_keys, stage, is_active)
 VALUES
     -- Internal hospital system (Neon Postgres)
     ('neon_postgres', 'public', 'hospitals', NULL, NULL,
      'hospitals', 'hospitals', NULL,
-     'FULL', NULL, NULL, 'SOURCE_TO_SILVER', 1),
+     'FULL', NULL, 0, NULL, 'SOURCE_TO_SILVER', 1),
 
     ('neon_postgres', 'public', 'doctors', NULL, NULL,
      'doctors', 'doctors', NULL,
@@ -126,12 +128,12 @@ VALUES
 
     ('neon_postgres', 'public', 'patients', NULL, NULL,
      'patients', 'patients', NULL,
-     'MERGE', 'updated_at', 'patient_id', 'SOURCE_TO_SILVER', 1),
+     'MERGE', 'updated_at', 5, 'patient_id', 'SOURCE_TO_SILVER', 1),
 
     -- External partner feeds (ADLS CSV)
     ('adls_csv', NULL, 'lab_results', 'csv', 'lab_results',
      'lab_results', 'lab_results', NULL,
-     'APPEND', NULL, NULL, 'SOURCE_TO_SILVER', 1),
+     'APPEND', NULL, 0, NULL, 'SOURCE_TO_SILVER', 1),
 
     ('adls_csv', NULL, 'insurance_providers', 'csv', 'insurance_providers',
      'insurance_providers', 'insurance_providers', NULL,
