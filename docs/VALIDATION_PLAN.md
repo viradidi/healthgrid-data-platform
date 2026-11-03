@@ -76,8 +76,15 @@ The original Azure resources were decommissioned after the project was completed
 | ADF-06 | Source connection failure | Use unavailable endpoint or invalid test credential | Failure is visible; downstream does not treat missing data as a successful empty batch |
 | ADF-07 | Source branch failure | Force one source branch to fail | Failure is identifiable; Gold is not accepted solely because master continued |
 | ADF-08 | Concurrent execution | Trigger overlapping runs for the same source | No landing collision, checkpoint race, or unintended overwrite |
+| ADF-11 | PostgreSQL source branch failure | Force a failure before and during table iteration | Master waits for ADLS to finish; Gold is skipped; notification runs and reports FAILED with the PostgreSQL status |
+| ADF-12 | ADLS source branch failure | Force a failure before and during table iteration | Master waits for PostgreSQL to finish; Gold is skipped; notification runs and reports FAILED with the ADLS status |
+| ADF-13 | Both source branches fail | Force both source branches to fail | Gold does not run; notification runs once with both source statuses FAILED |
+| ADF-14 | Gold failure | Let both source branches succeed, then fail a Gold notebook | Notification runs after the Gold decision and reports FAILED |
+| ADF-15 | Empty source metadata | Run a source dispatcher with no active rows for its source_system | Dispatcher fails explicitly rather than succeeding with a zero-iteration ForEach |
+| ADF-16 | Empty Gold metadata | Run Gold dispatcher with no active SILVER_TO_GOLD rows | Gold dispatcher fails explicitly rather than reporting successful publication with zero models |
+| ADF-17 | Parent failure without table audit row | Force source metadata Lookup failure before audit initialization | Notification subject remains FAILED using parent branch status even if no table-level audit row exists |
 
-**Orchestration gate:** the master pipeline now requires both source branches to be Succeeded before starting Gold. Test each source branch failing independently and verify Gold is skipped. The notification branch intentionally runs after Gold is Completed so it can report success or failure.
+**Orchestration gate:** the master waits for both source branches on `Completed`, evaluates their `.Status` values, and invokes Gold only when both are `Succeeded`. The notification pipeline depends on the Gold-decision activity's `Completed` path, so it should still run when one or both source branches fail and Gold is skipped. The email subject must be FAILED whenever a parent branch is not Succeeded or a table-level audit row is non-SUCCESS. Both source-to-Silver and Silver-to-Gold dispatchers must fail closed when the active metadata lookup returns zero rows.
 
 ## 5A. CSV file manifest tests
 
