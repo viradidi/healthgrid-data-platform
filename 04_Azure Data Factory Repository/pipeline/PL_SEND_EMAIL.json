@@ -42,7 +42,10 @@
         "userProperties": [],
         "typeProperties": {
           "variableName": "body_header",
-          "value": "The HealthGrid master run has finished. The branch outcomes and table-level audit records are summarized below:"
+          "value": {
+            "value": "@concat('HealthGrid run status | PostgreSQL source-to-Silver: ', pipeline().parameters.postgres_status, ' | ADLS CSV source-to-Silver: ', pipeline().parameters.adls_status, ' | Gold stage: ', pipeline().parameters.gold_status, '. Table-level audit details follow.')",
+            "type": "Expression"
+          }
         }
       },
       {
