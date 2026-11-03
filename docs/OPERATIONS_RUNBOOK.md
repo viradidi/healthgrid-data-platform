@@ -1,6 +1,6 @@
 # HealthGrid — Operations Runbook
 
-This runbook covers routine execution, monitoring, failure diagnosis, and recovery for the HealthGrid data platform. The project was originally named CareSync, so exported ADF and Databricks artifacts retain legacy identifiers such as `adb_caresync` and `/caresync-repo/caresync-adb-repo/`. Verify these against the target workspace during redeployment.
+This runbook covers routine execution, monitoring, failure diagnosis, and recovery for the HealthGrid data platform. The project was originally named CareSync; current notebooks use the `healthgrid` catalog and `healthgrid.landing.landing_volume`, while ADF references notebooks under `/Shared/HealthGrid/`.
 
 The project was historically executed end-to-end successfully. This guide is an operational reference for a restored or redeployed environment; it does not claim that a currently available Azure workspace has been revalidated.
 
@@ -30,7 +30,7 @@ Before triggering a run:
 - Check that no overlapping run is processing the same source or rebuilding the same Gold target.
 - Verify notebook paths and catalog/volume names in the target environment.
 
-The notebook currently uses `/Volumes/adb_caresync/landing/landing_volume`; ADF paths also contain CareSync. These are environment-specific legacy references and must be checked rather than assumed to exist after workspace recreation.
+The Landing-to-Bronze notebook reads from `/Volumes/healthgrid/landing/landing_volume`. Ensure that the `healthgrid.landing.landing_volume` Unity Catalog Volume exists and is accessible to the Databricks execution identity. ADF notebook activities target `/Shared/HealthGrid/`.
 
 Useful queries:
 
@@ -174,19 +174,19 @@ Run checks appropriate to each output grain:
 ```sql
 -- Patient 360: one intended row per patient
 SELECT patient_id, COUNT(*) AS row_count
-FROM adb_caresync.gold.patient_360
+FROM healthgrid.gold.patient_360
 GROUP BY patient_id
 HAVING COUNT(*) > 1;
 
 -- Hospital daily summary: one row per hospital/date
 SELECT hospital_id, summary_date, COUNT(*) AS row_count
-FROM adb_caresync.gold.hospital_daily_summary
+FROM healthgrid.gold.hospital_daily_summary
 GROUP BY hospital_id, summary_date
 HAVING COUNT(*) > 1;
 
 -- Lab trends: one row per test/month
 SELECT test_name, year, month, COUNT(*) AS row_count
-FROM adb_caresync.gold.lab_test_trends
+FROM healthgrid.gold.lab_test_trends
 GROUP BY test_name, year, month
 HAVING COUNT(*) > 1;
 ```
@@ -211,7 +211,7 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 - **Schema evolution:** the current Landing-to-Bronze policy rejects field additions, removals, or data-type changes against an existing Bronze table. This is intentional fail-closed behavior; schema changes require a reviewed migration and updated validation evidence.
 - **Landing batch identity:** folders use a 24-hour timestamp with milliseconds plus the parent ADF run ID. This reduces accidental path collisions but does not provide cross-run data deduplication.
 - **Parallel processing:** ForEach activities run in parallel. Check for duplicate target configurations and shared-resource conflicts.
-- **Legacy identifiers:** verify CareSync catalog, volume, and notebook paths in the restored workspace.
+- **Workspace alignment:** verify the `healthgrid` catalog, landing Volume, and `/Shared/HealthGrid/` notebook paths in the restored workspace.
 - **Destructive source setup:** the PostgreSQL source creation script drops existing source tables. Treat it as a disposable environment reset, not a production migration.
 - **Synthetic data:** this is an educational dataset. Real healthcare deployment requires formal privacy, access-control, retention, audit, and regulatory controls.
 
