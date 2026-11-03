@@ -3,9 +3,41 @@
   "properties": {
     "activities": [
       {
+        "name": "Validate Table ID",
+        "type": "IfCondition",
+        "dependsOn": [],
+        "userProperties": [],
+        "typeProperties": {
+          "expression": {
+            "value": "@greater(pipeline().parameters.table_id,0)",
+            "type": "Expression"
+          },
+          "ifTrueActivities": [],
+          "ifFalseActivities": [
+            {
+              "name": "Fail Invalid Table ID",
+              "type": "Fail",
+              "dependsOn": [],
+              "userProperties": [],
+              "typeProperties": {
+                "message": "table_id must be a positive integer selected from active source metadata.",
+                "errorCode": "INVALID_TABLE_ID"
+              }
+            }
+          ]
+        }
+      },
+      {
         "name": "Read Table Details",
         "type": "Lookup",
-        "dependsOn": [],
+        "dependsOn": [
+          {
+            "activity": "Validate Table ID",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
         "policy": {
           "timeout": "0.12:00:00",
           "retry": 2,
@@ -18,7 +50,7 @@
           "source": {
             "type": "AzureSqlSource",
             "sqlReaderQuery": {
-              "value": "select * from ctrl.table_config WHERE table_id=@{pipeline().parameters.table_id}",
+              "value": "SELECT table_id, source_system, source_schema_name, source_table_name, source_file_format, source_path, bronze_table_name, silver_table_name, gold_table_name, load_type, watermark_column, watermark_lookback_minutes, merge_keys, stage, is_active\nFROM ctrl.table_config\nWHERE table_id = @{pipeline().parameters.table_id}",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
@@ -225,6 +257,12 @@
             "dependencyConditions": [
               "Succeeded"
             ]
+          },
+          {
+            "activity": "Validate Source Configuration",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
           }
         ],
         "userProperties": [],
@@ -250,7 +288,7 @@
                 "source": {
                   "type": "AzureSqlSource",
                   "sqlReaderQuery": {
-                    "value": "select watermark_value from ctrl.watermark where table_id=@{pipeline().parameters.table_id}",
+                    "value": "SELECT\n    w.watermark_value,\n    CASE\n      WHEN w.table_id IS NOT NULL\n       AND w.watermark_value IS NOT NULL\n       AND TRY_CONVERT(DATETIME2(6), w.watermark_value) IS NOT NULL\n      THEN CAST(1 AS INT) ELSE CAST(0 AS INT)\n    END AS watermark_is_valid\nFROM ctrl.table_config AS c\nLEFT JOIN ctrl.watermark AS w ON w.table_id = c.table_id\nWHERE c.table_id = @{pipeline().parameters.table_id}\n  AND c.source_system = 'neon_postgres'\n  AND c.load_type <> 'FULL'",
                     "type": "Expression"
                   },
                   "queryTimeout": "02:00:00",
@@ -259,7 +297,8 @@
                 "dataset": {
                   "referenceName": "AzureSqlTable1",
                   "type": "DatasetReference"
-                }
+                },
+                "firstRowOnly": true
               }
             },
             {
@@ -284,6 +323,38 @@
                   "value": "@activity('Read watermark').output.firstRow.watermark_value",
                   "type": "Expression"
                 }
+              }
+            },
+            {
+              "name": "Validate Watermark",
+              "type": "IfCondition",
+              "dependsOn": [
+                {
+                  "activity": "Store watermark value",
+                  "dependencyConditions": [
+                    "Succeeded"
+                  ]
+                }
+              ],
+              "userProperties": [],
+              "typeProperties": {
+                "expression": {
+                  "value": "@equals(activity('Read watermark').output.firstRow.watermark_is_valid,1)",
+                  "type": "Expression"
+                },
+                "ifTrueActivities": [],
+                "ifFalseActivities": [
+                  {
+                    "name": "Fail Invalid Watermark",
+                    "type": "Fail",
+                    "dependsOn": [],
+                    "userProperties": [],
+                    "typeProperties": {
+                      "message": "An incremental PostgreSQL source requires exactly one valid, non-null, DATETIME2-convertible watermark row. No source Copy was started.",
+                      "errorCode": "INVALID_WATERMARK"
+                    }
+                  }
+                ]
               }
             }
           ]
@@ -364,7 +435,7 @@
                   {
                     "type": "Query",
                     "text": {
-                      "value": "UPDATE ctrl.watermark\nSET watermark_value = CASE\n        WHEN TRY_CONVERT(DATETIME2(6), watermark_value) IS NULL\n          OR TRY_CONVERT(DATETIME2(6), watermark_value)\n             < TRY_CONVERT(DATETIME2(6), '@{variables('watermark_upper_bound')}')\n        THEN '@{variables('watermark_upper_bound')}'\n        ELSE watermark_value\n    END,\n    last_updated_timestamp = SYSUTCDATETIME()\nWHERE table_id = @{pipeline().parameters.table_id}",
+                      "value": "UPDATE ctrl.watermark\nSET watermark_value = CASE\n        WHEN TRY_CONVERT(DATETIME2(6), watermark_value) IS NULL\n          OR TRY_CONVERT(DATETIME2(6), watermark_value)\n             < TRY_CONVERT(DATETIME2(6), '@{variables('watermark_upper_bound')}')\n        THEN '@{variables('watermark_upper_bound')}'\n        ELSE watermark_value\n    END,\n    last_updated_timestamp = SYSUTCDATETIME()\nWHERE table_id = @{pipeline().parameters.table_id}\n\nIF @@ROWCOUNT <> 1\n    THROW 51035, 'Expected exactly one watermark row to be updated for the selected table.', 1;\n",
                       "type": "Expression"
                     }
                   }
@@ -412,7 +483,7 @@
                     "source": {
                       "type": "PostgreSqlV2Source",
                       "query": {
-                        "value": "SELECT * FROM \"@{activity('Read Table Details').output.firstRow.source_schema_name}\".\"@{activity('Read Table Details').output.firstRow.source_table_name}\"\n@{\n    if(equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),\n         '',\n         concat(\n            'WHERE \"',\n            activity('Read Table Details').output.firstRow.watermark_column,\n            '\" >= ',\n            '''',\n            formatDateTime(\n                addMinutes(\n                    variables('watermark_value'),\n                    mul(-1, int(coalesce(activity('Read Table Details').output.firstRow.watermark_lookback_minutes, 0)))\n                ),\n                'yyyy-MM-ddTHH:mm:ss.ffffff'\n            ),\n            ''' AND \"',\n            activity('Read Table Details').output.firstRow.watermark_column,\n            '\" < ',\n            '''',\n            variables('watermark_upper_bound'),\n            ''''\n         )\n    )\n}",
+                        "value": "@concat(\n    'SELECT * FROM \"',\n    replace(activity('Read Table Details').output.firstRow.source_schema_name, '\"', '\"\"'),\n    '\".\"',\n    replace(activity('Read Table Details').output.firstRow.source_table_name, '\"', '\"\"'),\n    '\"',\n    if(\n        equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),\n        '',\n        concat(\n            ' WHERE \"',\n            replace(activity('Read Table Details').output.firstRow.watermark_column, '\"', '\"\"'),\n            '\" >= ''',\n            formatDateTime(\n                addMinutes(\n                    variables('watermark_value'),\n                    mul(-1, int(coalesce(activity('Read Table Details').output.firstRow.watermark_lookback_minutes,0)))\n                ),\n                'yyyy-MM-ddTHH:mm:ss.ffffff'\n            ),\n            ''' AND \"',\n            replace(activity('Read Table Details').output.firstRow.watermark_column, '\"', '\"\"'),\n            '\" < ''',\n            variables('watermark_upper_bound'),\n            ''''\n        )\n    )\n)",
                         "type": "Expression"
                       },
                       "queryTimeout": "02:00:00"
@@ -863,12 +934,44 @@
             }
           ]
         }
+      },
+      {
+        "name": "Validate Source Configuration",
+        "type": "IfCondition",
+        "dependsOn": [
+          {
+            "activity": "Read Table Details",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "userProperties": [],
+        "typeProperties": {
+          "expression": {
+            "value": "@and(\n  or(equals(activity('Read Table Details').output.firstRow.source_system,'neon_postgres'),equals(activity('Read Table Details').output.firstRow.source_system,'adls_csv')),\n  or(equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),equals(activity('Read Table Details').output.firstRow.load_type,'APPEND'),equals(activity('Read Table Details').output.firstRow.load_type,'MERGE')),\n  if(\n    equals(activity('Read Table Details').output.firstRow.source_system,'neon_postgres'),\n    and(\n      not(empty(activity('Read Table Details').output.firstRow.source_schema_name)),\n      not(empty(activity('Read Table Details').output.firstRow.source_table_name)),\n      or(\n        equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),\n        and(\n          not(empty(activity('Read Table Details').output.firstRow.watermark_column)),\n          greaterOrEquals(int(coalesce(activity('Read Table Details').output.firstRow.watermark_lookback_minutes,0)),0)\n        )\n      )\n    ),\n    and(\n      equals(activity('Read Table Details').output.firstRow.source_system,'adls_csv'),\n      not(empty(activity('Read Table Details').output.firstRow.source_table_name)),\n      not(empty(activity('Read Table Details').output.firstRow.source_path)),\n      equals(activity('Read Table Details').output.firstRow.source_file_format,'csv'),\n      or(equals(activity('Read Table Details').output.firstRow.load_type,'FULL'),equals(activity('Read Table Details').output.firstRow.load_type,'APPEND'))\n    )\n  )\n)",
+            "type": "Expression"
+          },
+          "ifTrueActivities": [],
+          "ifFalseActivities": [
+            {
+              "name": "Fail Invalid Source Configuration",
+              "type": "Fail",
+              "dependsOn": [],
+              "userProperties": [],
+              "typeProperties": {
+                "message": "The selected source metadata is incomplete or unsupported. Check source system, load strategy, identifiers, path, format, watermark column, and lookback configuration.",
+                "errorCode": "INVALID_SOURCE_CONFIGURATION"
+              }
+            }
+          ]
+        }
       }
     ],
     "parameters": {
       "table_id": {
-        "type": "string",
-        "defaultValue": "1"
+        "type": "int",
+        "defaultValue": 1
       },
       "adf_run_id": {
         "type": "string",
