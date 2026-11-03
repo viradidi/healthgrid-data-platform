@@ -24,7 +24,7 @@ This is a static review of the committed implementation and documentation. It is
 | CSV file manifest | `ctrl.file_ingestion_manifest` and ADF per-file Copy loop | Tracks source file versions through IN_PROGRESS, COPIED, PROCESSED, and FAILED states |
 | Databricks transformation | Bronze-to-Silver notebook | Fail-closed FULL/APPEND/MERGE routing; version-aware MERGE with source/target key, column-name, and data-type validation |
 | Calendar | Calendar preparation notebook | Reusable date dimension |
-| Gold | Patient 360, hospital daily summary, lab test trends notebooks | Dataset-specific SQL transformations plus required-column, grain uniqueness, and metric-bound assertions |
+| Gold | Patient 360, hospital daily summary, lab test trends notebooks | Dataset-specific SQL, pre-publication input-integrity checks for event/dimension/calendar keys and relationships, plus output schema, grain, and metric assertions |
 | Architecture | assets/architecture-overview.png | Original project architecture diagram |
 
 ## Metadata-driven design
@@ -77,7 +77,7 @@ The ADF producer payload is documented in `docs/NOTIFICATION_CONTRACT.md`. The L
 
 ### Gold publication and recovery
 
-Gold notebooks use full rebuild/replace behavior. Validate target consistency and recovery if a notebook fails during publication. Test parallel execution for shared-resource conflicts.
+Gold notebooks use full rebuild/replace behavior. Before each replacement, they validate unique laboratory event IDs, dimension/calendar key uniqueness, required relationship resolution, and modeled event date/status fields. This is a publication guard, not Silver deduplication: APPEND can still admit the same business event under a different landing batch, so the affected Silver rows must be reconciled before Gold is retried. Output schema, grain, and metric assertions run after materialization. Validate target consistency and recovery if a notebook fails during publication, and test parallel execution for shared-resource conflicts.
 
 ### Legacy identifiers and destructive setup
 
