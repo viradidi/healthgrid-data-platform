@@ -50,7 +50,7 @@
           "source": {
             "type": "AzureSqlSource",
             "sqlReaderQuery": {
-              "value": "SELECT table_id\nFROM ctrl.table_config\nWHERE is_active = 1\n  AND source_system = '@{replace(pipeline().parameters.source_system,'''','''''')}'",
+              "value": "SELECT table_id\nFROM ctrl.table_config\nWHERE is_active = 1\n  AND stage = 'SOURCE_TO_SILVER'\n  AND source_system = '@{replace(pipeline().parameters.source_system,'''','''''')}'",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
