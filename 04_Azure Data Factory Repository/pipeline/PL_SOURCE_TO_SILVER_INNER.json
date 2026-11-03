@@ -68,7 +68,7 @@
     },
     "userProperties": [],
     "typeProperties": {
-     "notebookPath": "/caresync-repo/caresync-adb-repo/Landing_to_Bronze",
+     "notebookPath": "/Shared/HealthGrid/Landing_to_Bronze",
      "baseParameters": {
       "source_system": {
        "value": "@activity('Read Table Details').output.firstRow.source_system",
@@ -117,7 +117,7 @@
     },
     "userProperties": [],
     "typeProperties": {
-     "notebookPath": "/caresync-repo/caresync-adb-repo/Bronze_to_Silver",
+     "notebookPath": "/Shared/HealthGrid/Bronze_to_Silver",
      "baseParameters": {
       "table_name": {
        "value": "@activity('Read Table Details').output.firstRow.silver_table_name",
