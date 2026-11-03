@@ -59,6 +59,7 @@ The repository also contains a recipient address in exported factory configurati
 | Databricks compute | `<existing-cluster-id>` placeholder | Select supported target compute and replace the placeholder |
 | Key Vault | `https://<key-vault-name>.vault.azure.net/` | Set the target vault URL and grant ADF identity access |
 | Linked-service endpoints | Explicit placeholders in linked-service JSON | Populate ADLS account, Azure SQL server/database/username, and Databricks workspace URL before publishing |
+| Notification | Exported Logic Apps global parameter | Create a new endpoint and inject it securely |
 | Email recipient | Exported factory parameter | Configure approved recipient securely |
 
 ## 5. Deployment sequence
