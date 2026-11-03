@@ -414,3 +414,12 @@ A test is PASS only when its acceptance criteria are supported by captured evide
 - **GOLD-03 — Failure path:** Force a Gold notebook failure; verify the table-stage audit is marked FAILED and the pipeline Fail activity runs only after that failure-audit update succeeds. On a successful notebook path, the failure terminator must be skipped.
 - **GOLD-04 — Metadata selection:** Confirm only active `SILVER_TO_GOLD` metadata rows are processed and each `gold_table_name` resolves to its matching notebook.
 - **GOLD-05 — Full rebuild semantics:** Record that each Gold run replaces the full output table; its audit count describes output cardinality, not only rows changed since the prior run.
+
+## Gold input-integrity tests
+
+- **GOLD-06 — Duplicate APPEND event:** Insert a duplicate `lab_result_id` in a separate Silver batch; each Gold notebook must fail its preflight before executing `CREATE OR REPLACE TABLE`.
+- **GOLD-07 — Dimension fan-out:** Introduce a duplicate hospital, provider, doctor, or calendar key in a disposable Silver fixture; the affected Gold notebook must fail before table replacement.
+- **GOLD-08 — Orphan relationship:** Create a non-null patient/hospital/provider/doctor reference absent from its dimension; the relevant Gold notebook must fail before table replacement.
+- **GOLD-09 — Status and date taxonomy:** Use a NULL/unsupported result status or a missing date; Gold preflight must fail rather than silently lowering status rates or omitting calendar enrichment.
+- **GOLD-10 — Calendar coverage:** Use a hospital event date or lab-test month outside the calendar dimension; the relevant Gold model must fail before table replacement.
+- **GOLD-11 — Fixture reconciliation:** Verify the checked-in 8,228 initial plus 20 incremental lab events have unique event IDs, expected status values, and references within the seeded patient/hospital/doctor key ranges; verify patient insurance references resolve within the initial provider snapshot.
