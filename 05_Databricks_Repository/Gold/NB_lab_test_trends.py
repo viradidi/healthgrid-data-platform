@@ -3,7 +3,7 @@
 # MAGIC %md
 # MAGIC # NB_lab_test_trends
 # MAGIC
-# MAGIC Builds `healthgrid.gold.lab_test_trends` from monthly lab-result aggregates with optional calendar enrichment, then validates month-over-month trend columns and sample output.
+# MAGIC Builds `healthgrid.gold.lab_test_trends` and validates its schema, test/month grain, and metric bounds.
 
 # COMMAND ----------
 
@@ -66,6 +66,55 @@
 # COMMAND ----------
 
 # DBTITLE 1,Return lab test trends record count
+up# COMMAND ----------
+
+# DBTITLE 1,Validate lab test trends output contract
+from pyspark.sql import functions as F
+
 updated_df = spark.table("healthgrid.gold.lab_test_trends")
 record_count = updated_df.count()
+
+required_columns = {
+    "test_name", "year", "month", "month_name", "quarter_name",
+    "total_tests", "abnormal_test_count", "critical_test_count",
+    "abnormal_rate_pct", "critical_rate_pct",
+    "prev_month_abnormal_rate_pct", "abnormal_rate_change_pct",
+}
+missing_columns = sorted(required_columns - set(updated_df.columns))
+if missing_columns:
+    raise ValueError(f"lab_test_trends is missing required columns: {missing_columns}")
+
+if updated_df.filter(
+    F.col("test_name").isNull()
+    | F.col("year").isNull()
+    | F.col("month").isNull()
+    | (F.col("month") < 1)
+    | (F.col("month") > 12)
+).limit(1).count():
+    raise ValueError("lab_test_trends contains an invalid test/month grain key.")
+
+duplicate_test_month = (
+    updated_df.groupBy("test_name", "year", "month")
+    .count()
+    .filter(F.col("count") > 1)
+    .limit(1)
+    .count()
+)
+if duplicate_test_month:
+    raise ValueError("lab_test_trends violates its one-row-per-test/month grain.")
+
+invalid_metrics = updated_df.filter(
+    (F.col("total_tests") < 0)
+    | (F.col("abnormal_test_count") < 0)
+    | (F.col("abnormal_test_count") > F.col("total_tests"))
+    | (F.col("critical_test_count") < 0)
+    | (F.col("critical_test_count") > F.col("total_tests"))
+    | (F.col("abnormal_rate_pct").isNotNull() & ((F.col("abnormal_rate_pct") < 0) | (F.col("abnormal_rate_pct") > 100)))
+    | (F.col("critical_rate_pct").isNotNull() & ((F.col("critical_rate_pct") < 0) | (F.col("critical_rate_pct") > 100)))
+    | (F.col("abnormal_rate_change_pct").isNotNull() & ((F.col("abnormal_rate_change_pct") < -100) | (F.col("abnormal_rate_change_pct") > 100)))
+).limit(1).count()
+if invalid_metrics:
+    raise ValueError("lab_test_trends contains invalid counts, rates, or percentage-point changes.")
+
+print(f"[PASS] lab_test_trends schema, grain, and metric checks; rows={record_count}")
 dbutils.notebook.exit(str(record_count))
