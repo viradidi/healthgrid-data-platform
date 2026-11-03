@@ -373,7 +373,7 @@ jobs:
                           errors.append(f"{label} must use fictional Demo names and reserved .example contact addresses.")
                           break
 
-              if not {"3", "8", "14", "21"}.issubset(set(incremental_provider_ids)):
+              if not {3, 8, 14, 21}.issubset(set(incremental_provider_ids)):
                   errors.append("Later provider snapshot must include IDs referenced by the round-2 patient fixture.")
 
               control_seed = Path("02_Metadata Table Queries/create_control_tables.sql").read_text(encoding="utf-8")
