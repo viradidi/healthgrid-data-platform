@@ -70,7 +70,6 @@ if missing_calendar_dates:
     raise ValueError("Silver calendar does not cover every laboratory test_date used by hospital daily reporting.")
 
 # COMMAND ----------
-# COMMAND ----------
 
 # DBTITLE 1,Create hospital daily summary gold table
 # MAGIC %sql
