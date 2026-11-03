@@ -121,7 +121,7 @@ The control framework includes:
 
 | Path | Contents |
 |---|---|
-| [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Source table creation, seed data, and sample incremental changes |
+| [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Source table creation, seed data, incremental changes, and non-destructive patient timestamp-trigger migration |
 | [ADLS CSV source data](<01_Sources%20Data/02_adls_csv/>) | Initial and incremental partner feed samples |
 | [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, configurable lookback migration, CSV file manifest, audit setup, and safe audit-key migration |
 | [Gold STTM workbook](<03_Gold%20STTM/sttm_silver_to_gold.xlsx>) | Source-to-target mapping for analytical outputs |
