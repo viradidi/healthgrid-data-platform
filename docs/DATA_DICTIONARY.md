@@ -205,11 +205,13 @@ The active metadata rows are the source of truth for the configured processing t
 
 **Purpose:** Retain landed source batches in Delta format with ingestion context.
 
-The Landing-to-Bronze notebook reads the configured source system and table, then adds:
-- landing_timestamp: identifies the processing batch.
-- insert_timestamp: records when the batch is written into Bronze.
+The Landing-to-Bronze notebook validates the source system, Bronze table, landing timestamp, load strategy, and source format before reading the batch. It adds:
+- `landing_timestamp`: the ADF-generated batch identifier shared by the Landing-to-Bronze and Bronze-to-Silver stages.
+- `insert_timestamp`: the timestamp at which the DataFrame is written into Bronze.
 
-The Bronze layer preserves source-oriented data for downstream processing and traceability.
+The notebook appends each non-empty batch to its Bronze Delta table. It rejects source fields that collide with these reserved metadata names, case-insensitive duplicate column names, and field additions/removals/data-type changes against an existing Bronze schema. The current policy is fail-closed: schema evolution requires a reviewed migration rather than automatic schema merging. The same landing timestamp cannot be appended twice to an existing Bronze target.
+
+The batch guard is not a business-key deduplication mechanism. Identical business events delivered under a different ADF landing timestamp can still be appended again. The Bronze layer preserves source-oriented data for downstream processing and traceability.
 
 ### Silver
 
