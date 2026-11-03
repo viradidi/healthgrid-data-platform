@@ -90,6 +90,20 @@ The audit table uses `(adf_run_id, table_id, stage)` as its natural key: one rec
 
 Both source-to-Silver and Silver-to-Gold pipelines fail closed when their metadata lookup returns no active configurations. This prevents an empty ForEach from being treated as a successful processing stage and avoids publishing downstream outputs from stale inputs.
 
+### Notification outcome and delivery
+
+The notification request is correlated by the parent ADF `adf_run_id`. It carries the PostgreSQL source status, ADLS CSV source status, Gold decision status, and `status_table` audit rows. An empty `status_table` is valid when a source dispatcher fails before its table loop starts; use the parent statuses rather than interpreting an empty array as success.
+
+When a notification fails:
+
+1. Open the master run and inspect the `Send Email` Execute Pipeline activity and its child `PL_SEND_EMAIL` activities.
+2. Check the `Read All tables status` and `Check overall failed count` Lookup results for the same `adf_run_id`.
+3. Inspect the `Send Email` Web Activity HTTP status/response and the Logic Apps run history for the same request window.
+4. Confirm the target endpoint and recipient deployment settings are configured securely; never copy a signed URL or token into logs or Git.
+5. Do not rerun `PL_MASTER` merely to resend an email; that would rerun source and Gold processing. Before any manual resend, confirm from Logic Apps history that the first request did not already send the email.
+
+The Web Activity has no automatic retry while receiver-side idempotency is unverified. A successful HTTP acknowledgement is not by itself proof of mailbox delivery; confirm the Logic Apps email action and the intended recipient's delivery. Preserve the original parent run ID during notification diagnosis. See [Notification Payload Contract](NOTIFICATION_CONTRACT.md) for the exact fields and known compatibility boundary.
+
 ## 5. Load strategies and watermark handling
 
 ### FULL
