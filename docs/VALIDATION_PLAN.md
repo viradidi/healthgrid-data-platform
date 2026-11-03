@@ -158,20 +158,28 @@ The shared notebook receives the configured watermark column from active source 
 
 ## 7. Watermark and checkpoint tests
 
+The current PostgreSQL patients source uses a metadata-configured five-minute lookback. ADF captures a fixed UTC upper bound at the start of the table run and extracts the half-open interval `[previous watermark - lookback, run-start upper bound)`. The checkpoint advances to that captured upper bound only after Silver succeeds; the update is monotonic across overlapping runs.
+
 | ID | Scenario | Test procedure | Acceptance criteria |
 |---|---|---|---|
-| WMR-01 | Initial checkpoint | Run incremental object with seeded historical watermark | Expected initial history is selected |
-| WMR-02 | Successful checkpoint | Complete extraction and Silver processing | Checkpoint update occurs only after required processing succeeds; success audit waits for checkpoint activity success |
+| WMR-01 | Initial checkpoint | Run the patients MERGE with the seeded historical watermark and five-minute lookback | Expected source history is selected; the initial extraction window is bounded by the captured run-start upper bound |
+| WMR-02 | Successful checkpoint | Complete extraction and Silver processing | Checkpoint equals the captured run-start upper bound, not pipeline completion time; it advances only after required processing succeeds; success audit waits for checkpoint activity success |
 | WMR-03 | Failed Silver write | Force Silver notebook failure | Watermark does not advance |
 | WMR-04 | Failed checkpoint update | Allow Silver write, then fail checkpoint activity | Target/checkpoint discrepancy is observable and recoverable; success audit is not written and parent failure handling records FAILED |
-| WMR-05 | Equal timestamp boundary | Create source change at exact stored checkpoint | No eligible change is silently skipped |
-| WMR-06 | Late-arriving update | Add update with older source timestamp after later checkpoint | Defined lookback/CDC policy captures it, or limitation is accepted |
-| WMR-07 | Clock/time-zone difference | Use source and orchestration timestamps with known offsets | Comparisons use consistent documented time basis |
-| WMR-08 | Null/malformed watermark | Supply invalid checkpoint | Pipeline fails clearly before unsafe query |
-| WMR-09 | Per-object isolation | Process two incremental objects | One object's checkpoint does not alter the other's |
-| WMR-10 | Checkpoint recovery | Restore verified prior checkpoint in disposable environment | Backfill reconciles without silent loss or uncontrolled duplication |
+| WMR-05 | Inclusive lower boundary | Create a source change exactly equal to `previous watermark - lookback` | Row is selected by the `>=` lower-bound predicate and replayed safely through MERGE |
+| WMR-06 | Late-arriving update within lookback | Make a source update visible after the previous run's extraction but with `updated_at` inside the configured five-minute overlap | The next run re-reads the record and Silver reflects the newer source version |
+| WMR-07 | Late-arriving update outside lookback | Introduce a change whose source timestamp is more than five minutes behind the current checkpoint | Test demonstrates the known limitation: the bounded overlap does not guarantee capture; record the need for a larger source-specific window or CDC |
+| WMR-08 | UTC/time-zone consistency | Use source and orchestration timestamps with known offsets; inspect source DDL and incremental fixtures | Source `updated_at` values and ADF bounds use UTC with consistent timestamp precision; no implicit local-time conversion occurs |
+| WMR-09 | Null/malformed watermark | Supply an invalid or null checkpoint | Pipeline fails clearly before unsafe query execution |
+| WMR-10 | Per-object isolation | Process two incremental objects with different lookback values | Each object's window and checkpoint remain isolated by `table_id` |
+| WMR-11 | Checkpoint recovery | Restore a verified prior checkpoint in a disposable environment | Backfill reconciles without silent loss or uncontrolled duplication |
+| WMR-12 | Source change after run start | Commit a source update after the first run captures its upper bound | The first run does not advance beyond its captured bound; the next run's interval includes the later update |
+| WMR-13 | Overlapping concurrent runs | Run two attempts for the same metadata object with different captured upper bounds and complete the newer run first | Older completion cannot regress the persisted checkpoint; stale source versions cannot overwrite newer Silver values |
+| WMR-14 | Lookback replay idempotency | Re-run unchanged patient rows inside the overlap window | Silver retains one row per `patient_id`; equal-version identical payloads are no-ops and conflicts fail |
+| WMR-15 | Exclusive upper boundary | Create a source timestamp equal to the captured run-start upper bound | It is excluded from the current half-open window and selected by a subsequent window; no boundary row is lost |
 
-**Critical implementation-specific test:** the current ADF pipeline advances the PostgreSQL timestamp watermark to SYSUTCDATETIME(), rather than the maximum source timestamp actually observed. Test the extraction/checkpoint interval, late arrivals, and source clock behavior before relying on this design for production completeness. ADLS CSV selection is manifest-based and does not use `ctrl.watermark`.
+**Remaining source-contract limitations:** a five-minute lookback mitigates short visibility delays and modest backdating, but it is not a completeness guarantee. An update arriving later than the window, a change that does not update `updated_at`, a hard delete, or a timestamp anomaly outside the overlap can still be missed. The source DDL and supplied incremental scripts normalize the timestamp-without-time-zone values to UTC; a real source must honor that contract. ADLS CSV selection is manifest-based and does not use `ctrl.watermark`.
+
 
 ## 8. Audit and failure-path tests
 
