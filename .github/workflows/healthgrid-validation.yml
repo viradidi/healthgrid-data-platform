@@ -403,13 +403,14 @@ jobs:
                   if required not in manifest_finalization_sql:
                       errors.append(f"Manifest finalization is missing unresolved-state guard: {required}")
 
-              copied_activity = by_name.get("Mark File Copied", {})
+              manifest_activities_by_name = {activity["name"]: activity for activity in manifest_branch}
+              copied_activity = manifest_activities_by_name.get("Mark File Copied", {})
               copied_sql = activity_sql(copied_activity)
               for required in ("status IN ('IN_PROGRESS', 'COPIED')", "IF @@ROWCOUNT <> 1", "51032"):
                   if required not in copied_sql:
                       errors.append(f"Manifest COPIED transition is missing retry/row-count safeguard: {required}")
 
-              failed_manifest_activity = by_name.get("Mark File Copy Failed", {})
+              failed_manifest_activity = manifest_activities_by_name.get("Mark File Copy Failed", {})
               failed_manifest_sql = activity_sql(failed_manifest_activity)
               for required in ("status IN ('IN_PROGRESS', 'FAILED')", "IF @@ROWCOUNT <> 1", "51033"):
                   if required not in failed_manifest_sql:
