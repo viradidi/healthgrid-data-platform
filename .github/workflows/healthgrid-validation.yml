@@ -496,6 +496,92 @@ jobs:
                       errors.append(f"{stage} success audit update is not stage-scoped.")
                   if "IF @@ROWCOUNT <> 1" not in success_sql:
                       errors.append(f"{stage} success audit update must fail if exactly one row was not updated.")
+
+              # Master orchestration must wait for both source branches, gate Gold, and attempt notification.
+              master_path = Path("04_Azure Data Factory Repository/pipeline/PL_MASTER.json")
+              email_path = Path("04_Azure Data Factory Repository/pipeline/PL_SEND_EMAIL.json")
+              master_document = json.loads(master_path.read_text(encoding="utf-8"))
+              email_document = json.loads(email_path.read_text(encoding="utf-8"))
+              master_activities = {a["name"]: a for a in master_document["properties"]["activities"]}
+              postgres_activity = master_activities.get("Source to Silver Postgres", {})
+              adls_activity = master_activities.get("Source to Silver ADLS csv", {})
+              gold_gate = master_activities.get("Run Gold only when both sources succeed", {})
+              notification = master_activities.get("Send Email", {})
+              if not postgres_activity or not adls_activity or not gold_gate or not notification:
+                  errors.append("PL_MASTER is missing a required source, Gold gate, or notification activity.")
+              else:
+                  gate_dependencies = {
+                      (d.get("activity"), tuple(d.get("dependencyConditions", [])))
+                      for d in gold_gate.get("dependsOn", [])
+                  }
+                  for source_name in ("Source to Silver Postgres", "Source to Silver ADLS csv"):
+                      if (source_name, ("Completed",)) not in gate_dependencies:
+                          errors.append(f"Gold gate must wait for {source_name} to complete, regardless of outcome.")
+                  gate_expression = gold_gate.get("typeProperties", {}).get("expression", {}).get("value", "")
+                  for source_name in ("Source to Silver Postgres", "Source to Silver ADLS csv"):
+                      expected = f"equals(activity('{source_name}').Status,'Succeeded')"
+                      if expected not in gate_expression:
+                          errors.append(f"Gold gate expression must explicitly require {source_name} to succeed.")
+                  true_activities = gold_gate.get("typeProperties", {}).get("ifTrueActivities", [])
+                  if not any(
+                      a.get("type") == "ExecutePipeline"
+                      and a.get("typeProperties", {}).get("pipeline", {}).get("referenceName") == "PL_SILVER_TO_GOLD"
+                      and a.get("typeProperties", {}).get("waitOnCompletion") is True
+                      for a in true_activities
+                  ):
+                      errors.append("Gold gate true branch must wait for PL_SILVER_TO_GOLD.")
+                  if gold_gate.get("typeProperties", {}).get("ifFalseActivities") != []:
+                      errors.append("Gold gate false branch must not invoke downstream processing.")
+                  if not any(
+                      d.get("activity") == "Run Gold only when both sources succeed"
+                      and "Completed" in d.get("dependencyConditions", [])
+                      for d in notification.get("dependsOn", [])
+                  ):
+                      errors.append("Notification must follow the Gold decision's Completed path.")
+                  email_parameters = notification.get("typeProperties", {}).get("parameters", {})
+                  for parameter in ("adf_run_id", "postgres_status", "adls_status", "gold_status"):
+                      if parameter not in email_parameters:
+                          errors.append(f"PL_MASTER must pass {parameter} to PL_SEND_EMAIL.")
+              notification_parameters = email_document.get("properties", {}).get("parameters", {})
+              for parameter in ("postgres_status", "adls_status", "gold_status"):
+                  if parameter not in notification_parameters:
+                      errors.append(f"PL_SEND_EMAIL is missing parent branch parameter {parameter}.")
+              email_subject_activity = next(
+                  (a for a in email_document["properties"]["activities"] if a.get("name") == "Prepare Email Subject"),
+                  {}
+              )
+              email_subject_expression = email_subject_activity.get("typeProperties", {}).get("value", {}).get("value", "")
+              for parameter in ("postgres_status", "adls_status", "gold_status"):
+                  if f"pipeline().parameters.{parameter}" not in email_subject_expression:
+                      errors.append(f"Email subject must incorporate {parameter}.")
+              if "'FAILED'" not in email_subject_expression or "'SUCCESS'" not in email_subject_expression:
+                  errors.append("Email subject must distinguish FAILED from SUCCESS.")
+              email_body_activity = next(
+                  (a for a in email_document["properties"]["activities"] if a.get("name") == "Prepare Logic apps body"),
+                  {}
+              )
+              email_body_expression = email_body_activity.get("typeProperties", {}).get("value", {}).get("value", "")
+              for parameter in ("postgres_status", "adls_status", "gold_status"):
+                  if f"pipeline().parameters.{parameter}" not in email_body_expression:
+                      errors.append(f"Email payload must expose {parameter}.")
+
+              # Reject empty metadata results instead of succeeding with an empty ForEach.
+              for document, label in ((main_pipeline, "source"), (gold_pipeline, "Gold")):
+                  top = {a.get("name"): a for a in document["properties"]["activities"]}
+                  guard_name = "Validate Active Source Tables" if label == "source" else "Validate Active Gold Models"
+                  guard = top.get(guard_name, {})
+                  loop = top.get("Ingest All tables", {})
+                  guard_expression = guard.get("typeProperties", {}).get("expression", {}).get("value", "")
+                  if "length(activity('Read Source Tables List').output.value)" not in guard_expression:
+                      errors.append(f"{label} dispatcher must explicitly reject an empty active metadata result.")
+                  false_activities = guard.get("typeProperties", {}).get("ifFalseActivities", [])
+                  if not any(a.get("type") == "Fail" for a in false_activities):
+                      errors.append(f"{label} metadata guard false branch must contain a Fail activity.")
+                  if not any(
+                      d.get("activity") == guard_name and "Succeeded" in d.get("dependencyConditions", [])
+                      for d in loop.get("dependsOn", [])
+                  ):
+                      errors.append(f"{label} ForEach must depend on successful metadata validation.")
           except Exception as exc:
               errors.append(f"Repository contract validation failed: {exc}")
 
