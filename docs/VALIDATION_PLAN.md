@@ -256,7 +256,7 @@ The current PostgreSQL patients source uses a metadata-configured five-minute lo
 | ID | Scenario | Test procedure | Acceptance criteria |
 |---|---|---|---|
 | AUD-01 | Start audit | Start table-stage execution | IN_PROGRESS record is associated with expected ADF run and table |
-| AUD-02 | Success audit | Complete notebook, checkpoint control (or valid FULL/no-data skip), and success activity | SUCCESS, end time, and records_written reflect execution; incremental no-data is SUCCESS with zero rows |
+| AUD-02 | Success audit | Complete notebook, checkpoint control (or valid FULL/no-data skip), and success activity | SUCCESS, end time, and `records_written` reflects logical rows written; NO_DATA is SUCCESS with zero rows |
 | AUD-03 | Failure audit | Force upstream notebook/activity failure | FAILED status identifies table and stage |
 | AUD-04 | Audit update failure | Fail audit update after data write and checkpoint success | Data/checkpoint success and audit failure are distinguishable |
 | AUD-05 | Stale IN_PROGRESS | Simulate interrupted run | Stale execution is discoverable and reconcilable to ADF history |
@@ -264,6 +264,9 @@ The current PostgreSQL patients source uses a metadata-configured five-minute lo
 | AUD-07 | Idempotent audit retry | Start the same table/stage twice using the same parent ADF run ID | One row exists for the natural key; the second start resets status to IN_PROGRESS and clears prior result fields |
 | AUD-08 | Stage-scoped updates | Use the same parent run and table ID for SOURCE_TO_SILVER and SILVER_TO_GOLD | Updating one stage does not change the other stage's audit row |
 | AUD-09 | Unique-key enforcement | Attempt to create duplicate `(adf_run_id, table_id, stage)` rows | Unique key rejects the duplicate |
+| AUD-10 | MERGE actual writes | Run a batch with a mix of inserts, newer-version updates, stale records, and equal-version identical records | Audit `records_written` equals Delta `numTargetRowsInserted + numTargetRowsUpdated`; stale and no-op rows are excluded |
+| AUD-11 | MERGE no-op | Run a batch containing only stale or equal-version identical source records | MERGE succeeds and audit `records_written` is zero |
+| AUD-12 | MERGE metric correlation | Run concurrent or adjacent writes against the same Silver table | The reported metric comes from the unique commit marker for the exact ADF run/table/batch, not an unrelated latest history row |
 | AUD-10 | Existing-history migration precheck | Run migration against a disposable audit table containing duplicate natural keys | Migration stops before creating the unique index and does not delete historical rows |
 | AUD-11 | Concurrent upsert | Simulate two attempts to create the same run/table/stage key | HOLDLOCK plus unique index leaves exactly one audit row; losing attempt is surfaced for reconciliation |
 
@@ -396,3 +399,10 @@ A test is PASS only when its acceptance criteria are supported by captured evide
 - **SB-02:** A missing, blank, or unsupported status fails before Silver reads or writes data.
 - **SB-03:** `NO_DATA` exits before Silver writes and returns zero processed records.
 - **SB-04:** A `NO_DATA` run must not advance a PostgreSQL watermark; a `DATA` run may advance it only after successful Silver processing and manifest finalization.
+### Silver row-count semantics
+
+- **MET-01:** FULL and APPEND record the successfully written input row count.
+- **MET-02:** An initial MERGE table creation records the rows written to the new target.
+- **MET-03:** An existing Delta MERGE records `numTargetRowsInserted + numTargetRowsUpdated` from the uniquely tagged Delta commit.
+- **MET-04:** Stale or equal-version identical records are excluded from `records_written`; a no-op MERGE reports zero.
+- **MET-05:** Missing/multiple matching commits or missing operation metric keys fail the notebook rather than publishing an inferred count.
