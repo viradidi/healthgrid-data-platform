@@ -113,10 +113,16 @@ The manifest state machine is a conservative file-level replay guard. It does no
 | BRZ-07 | Replay same batch | Process the same landing timestamp twice | Second Bronze append is rejected before mutation when that batch already exists |
 | BRZ-10 | Schema drift | Add/remove a field or change a field type after the Bronze schema is established | Bronze append fails with a clear drift report before target mutation; reviewed migration is required |
 | BRZ-11 | New-run replay | Re-run source extraction so the same source records land under a new ADF run ID | Test demonstrates that batch-ID protection alone does not deduplicate the same business records across newly identified batches; apply the intended APPEND deduplication/manifest policy |
+| BRZ-12 | Missing/invalid load strategy | Omit load_type or pass an unsupported value | Notebook fails before reading/writing Bronze; it never assumes FULL |
+| BRZ-13 | Unsafe identifiers | Pass invalid source_system, table_name, or landing_timestamp values | Notebook rejects parameters before constructing paths or table identifiers |
+| BRZ-14 | Reserved metadata columns | Include landing_timestamp or insert_timestamp in the incoming source (including case variants) | Notebook rejects the source before adding operational metadata or writing Bronze |
+| BRZ-15 | Case-insensitive source columns | Supply duplicate column names differing only by case | Notebook rejects the incoming schema before target mutation |
+| BRZ-16 | Existing Bronze technical schema | Remove/rename a technical metadata column or change its type | Notebook blocks the write and requires a reviewed Bronze migration |
+| BRZ-17 | Case-insensitive schema comparison | Change a source column's case without changing its meaning, then separately add/remove/change a field type | Name-only case differences are matched consistently; additions/removals/type drift fail before append |
 | BRZ-08 | Schema drift | Add, remove, or change a source field | Drift is detected or handled by explicit policy; no silent incorrect coercion |
 | BRZ-09 | ADF no-data status propagation | Run an incremental source that produces no landing records | Landing-to-Bronze returns `NO_DATA`; ADF passes that status to Silver; Silver exits with zero rows; checkpoint remains unchanged; audit records SUCCESS with zero rows |
 
-The current Landing-to-Bronze notebook appends rows and adds batch/insert timestamps. It rejects exact same-timestamp batch replay and fails closed on Bronze schema drift. It does not deduplicate identical source records re-extracted into a new batch ID; BRZ-11 remains a key reliability test. Schema validation is static code evidence until run in Databricks.
+The current Landing-to-Bronze notebook validates source/table/batch parameters and load strategy, appends non-empty batches with batch/insert timestamps, rejects source columns that collide with reserved technical metadata, and enforces a case-insensitive fail-closed schema contract. It rejects exact same-timestamp batch replay but does not deduplicate identical business records re-extracted under a new batch ID; BRZ-11 remains a key reliability test. Static CI checks the repository/code contract and notebook syntax; the Databricks-specific data scenarios above still require runtime execution.
 
 ## 6. Silver transformation tests
 
