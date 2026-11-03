@@ -47,6 +47,7 @@ Metadata drives the end-to-end framework and execution/selection; the individual
 | docs/OPERATIONS_RUNBOOK.md | Monitoring, audit, checkpoints, troubleshooting, and recovery |
 | docs/VALIDATION_PLAN.md | Metadata, ADF, Bronze, Silver, watermark, audit, and Gold test scenarios |
 | docs/DEPLOYMENT.md | Environment inventory, secure configuration, deployment, rollback, and cost cleanup |
+| docs/NOTIFICATION_CONTRACT.md | ADF producer payload, parent status semantics, Logic Apps compatibility boundary, and delivery limitations |
 
 ## Findings and actions
 
@@ -58,7 +59,9 @@ Revocation addresses credential validity. Repository cleanup addresses accidenta
 
 ### Master pipeline dependency semantics
 
-The master pipeline was updated so Gold requires both source branches to be Succeeded. The notification branch intentionally remains dependent on Gold being Completed, allowing notification after either a successful or failed Gold run. Verify these dependency semantics with failure-injection tests after redeployment.
+The master pipeline waits for both source branches to reach Completed, evaluates both activity Status values, and invokes Gold only when both sources succeeded. Notification depends on the Gold decision activity reaching Completed, so notification also runs when Gold is skipped because a source failed. The request contains the parent run ID and branch outcomes. The recipient key retains the legacy `email_receipients` spelling pending inspection of the external consumer.
+
+The ADF producer payload is documented in `docs/NOTIFICATION_CONTRACT.md`. The Logic Apps workflow/definition is not included in the repository, so its Parse JSON schema, email connector mapping, receiver-side idempotency, and mailbox delivery are not verified.
 
 ### Replay and checkpoint guarantees
 
