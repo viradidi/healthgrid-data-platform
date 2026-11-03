@@ -161,7 +161,7 @@ The control framework includes:
 
 | Path | Contents |
 |---|---|
-| [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Source table creation, seed data, incremental changes, and non-destructive patient timestamp-trigger migration |
+| [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Non-destructive fresh initialization, explicitly gated source reset, seed data, incremental changes, and patient timestamp-trigger migration |
 | [ADLS CSV source data](<01_Sources%20Data/02_adls_csv/>) | Initial and incremental partner feed samples |
 | [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, configurable lookback migration, CSV file manifest, audit setup, and safe audit-key migration |
 | [Gold STTM workbook](<03_Gold%20STTM/sttm_silver_to_gold.xlsx>) | Source-to-target mapping for analytical outputs |
@@ -206,7 +206,7 @@ A redeployment should follow this high-level sequence:
 7. Run the master pipeline and verify the source-to-Silver and Silver-to-Gold audit records.
 8. Reconcile source, Bronze, Silver, and Gold record counts and inspect the resulting analytical tables.
 
-The source-table creation script contains DROP TABLE statements and is intended for controlled initial setup or reset in a disposable environment. Do not run it against an environment containing data that must be retained.
+Source initialization and destructive reset are separate operations. `create_source_tables.sql` creates and seeds the three PostgreSQL tables only when none of them exists; it refuses to run over existing data. An intentional disposable-environment reset requires the separate `reset_source_tables.sql` script and the explicit same-session setting documented in that file. Azure SQL control-table creation follows the same fresh-initialization-only rule; `drop_control_tables.sql` requires a separate session-context authorization and deletes metadata, checkpoints, audit history, and file replay state. Review [the deployment guide](docs/DEPLOYMENT.md) before running either reset.
 
 The repository uses the `healthgrid` catalog and `/Volumes/healthgrid/landing/landing_volume` for Databricks storage. ADF notebook activities point to `/Shared/HealthGrid/`; import the notebooks at those workspace paths or update the ADF references consistently. Linked-service exports use explicit placeholders for the target Key Vault, ADLS account, Azure SQL server/database/user, Databricks workspace, and cluster. Replace these placeholders before publishing. Credentials continue to be resolved through Key Vault references.
 
@@ -222,7 +222,7 @@ A production adaptation would require a separately designed security and privacy
 - Timestamp watermarks are not CDC: hard deletes are not captured, source updates older than the configured five-minute lookback can still be missed, and `updated_at` must be maintained reliably in UTC. Revalidate late-arrival, concurrency, and timestamp-boundary behavior in a restored Azure environment.
 - The MERGE strategy depends on correctly configured business keys and appropriate source deduplication.
 - The master pipeline gates Gold on successful source branches; its notification branch runs after Gold completes.
-- The source setup SQL is destructive and should be treated as an initialization/reset script.
+- Source/control initialization is non-destructive and refuses existing control objects; destructive resets are separate, explicitly gated scripts intended only for disposable environments.
 - Environment-specific catalog, workspace, notebook, storage, and integration references must be parameterized or updated during redeployment.
 
 These considerations are documented to make the implementation and its operational boundaries clear; they do not change the fact that the project was successfully run in its original environment.
