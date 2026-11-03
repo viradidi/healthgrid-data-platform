@@ -235,6 +235,67 @@ jobs:
               if "target schema does not match" not in silver_source.lower():
                   errors.append("Silver MERGE must fail closed when source and target schemas differ.")
 
+              # Static contract checks for bounded, overlap-window PostgreSQL watermarking.
+              postgres_case = next(
+                  case for case in switch["typeProperties"]["cases"]
+                  if case["value"] == "neon_postgres"
+              )
+              postgres_copy = next(
+                  activity for activity in postgres_case["activities"]
+                  if activity["name"] == "Source to Landing Ingestion"
+              )
+              postgres_query = postgres_copy["typeProperties"]["source"]["query"]["value"]
+              for required in ("watermark_lookback_minutes", "watermark_upper_bound", "addMinutes", '" >= "', '" < "'):
+                  if required not in postgres_query:
+                      errors.append(f"PostgreSQL watermark query is missing bounded-window contract: {required}")
+
+              upper_bound_activity = by_name.get("Set Watermark Upper Bound")
+              if not upper_bound_activity:
+                  errors.append("ADF must capture a fixed watermark upper bound before source extraction.")
+              else:
+                  upper_expression = upper_bound_activity.get("typeProperties", {}).get("value", {}).get("value", "")
+                  if "utcNow()" not in upper_expression or "formatDateTime" not in upper_expression:
+                      errors.append("Watermark upper bound must be captured from a formatted UTC run-start timestamp.")
+                  activity_order = [activity["name"] for activity in top_activities]
+                  if activity_order.index("Set Watermark Upper Bound") > activity_order.index("Check load type"):
+                      errors.append("Watermark upper bound must be captured before the source extraction branch.")
+
+              check_load_type = by_name.get("Check load type", {})
+              check_dependencies = {dep.get("activity") for dep in check_load_type.get("dependsOn", [])}
+              if "Set Watermark Upper Bound" not in check_dependencies:
+                  errors.append("Source extraction must depend on the captured watermark upper bound.")
+
+              watermark_gate = by_name.get("Checking Load Type and Update Watermark", {})
+              watermark_updates = watermark_gate.get("typeProperties", {}).get("ifTrueActivities", [])
+              watermark_update = next(
+                  (activity for activity in watermark_updates if activity.get("name") == "Update watermark"),
+                  {}
+              )
+              watermark_sql = "\\n".join(
+                  script.get("text", {}).get("value", "")
+                  for script in watermark_update.get("typeProperties", {}).get("scripts", [])
+              )
+              if "watermark_upper_bound" not in watermark_sql or "TRY_CONVERT(DATETIME2(6)" not in watermark_sql:
+                  errors.append("Watermark checkpoint must persist the captured upper bound using safe timestamp conversion.")
+              if "ELSE watermark_value" not in watermark_sql:
+                  errors.append("Watermark checkpoint update must be monotonic and retain a newer existing value.")
+              if re.search(r"SET\\s+watermark_value\\s*=\\s*SYSUTCDATETIME", watermark_sql, re.I):
+                  errors.append("Watermark checkpoint must not advance to pipeline completion time.")
+
+              lookback_migration_path = Path("02_Metadata Table Queries/add_watermark_lookback.sql")
+              if "watermark_lookback_minutes" not in control_sql:
+                  errors.append("Fresh control-table DDL must include watermark_lookback_minutes.")
+              if not lookback_migration_path.is_file():
+                  errors.append("Existing control databases require the watermark lookback migration.")
+              else:
+                  lookback_migration = lookback_migration_path.read_text(encoding="utf-8")
+                  if "watermark_lookback_minutes" not in lookback_migration or "SET watermark_lookback_minutes = 5" not in lookback_migration:
+                      errors.append("Watermark lookback migration must add the field and initialize patient lookback to five minutes.")
+
+              source_ddl_path = Path("01_Sources Data/01_postgres/create_source_tables.sql")
+              if "timezone('UTC', NOW())" not in source_ddl_path.read_text(encoding="utf-8"):
+                  errors.append("PostgreSQL source DDL must define UTC timestamp defaults for source watermark fields.")
+
               # Audit natural-key and idempotent retry contract across both table loops.
               main_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_MAIN.json")
               inner_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
