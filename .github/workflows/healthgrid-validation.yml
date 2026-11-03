@@ -123,6 +123,30 @@ jobs:
               if not Path(name).is_file():
                   errors.append(f"Required documentation missing: {name}")
 
+          # Release rollback and persisted-state recovery documentation contract.
+          deployment_doc = Path("docs/DEPLOYMENT.md").read_text(encoding="utf-8")
+          validation_doc = Path("docs/VALIDATION_PLAN.md").read_text(encoding="utf-8")
+          required_rollback_controls = [
+              "## 8. Release rollback and data recovery",
+              "Reverting Git alone does not change the live published factory.",
+              "There are no automatic down migrations.",
+              "watermarks, audit rows, and manifest states",
+              "Do not treat a table version number alone as a guaranteed recovery point.",
+              "Never restore only the control database or only the lake",
+              "Re-enable schedules only after the recovery owner records the evidence",
+          ]
+          for required in required_rollback_controls:
+              if required not in deployment_doc:
+                  errors.append(f"Deployment rollback guide is missing required control: {required}")
+
+          for recovery_test in ("RCV-01", "RCV-02", "RCV-03", "RCV-04", "RCV-05", "RCV-06", "RCV-07"):
+              if recovery_test not in validation_doc:
+                  errors.append(f"Validation plan is missing release-recovery scenario {recovery_test}.")
+          if "G6A — Release rollback" not in validation_doc:
+              errors.append("Validation plan must include the G6A release rollback acceptance gate.")
+          if "BLOCKED rather than PASS" not in validation_doc:
+              errors.append("Release-recovery tests must distinguish blocked runtime evidence from a pass.")
+
           # Static contract checks for the metadata-driven ADLS CSV file manifest.
           pipeline_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
           dataset_path = Path("04_Azure Data Factory Repository/dataset/DS_Csv_Binary_File.json")
