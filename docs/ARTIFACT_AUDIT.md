@@ -24,7 +24,7 @@ This is a static review of the committed implementation and documentation. It is
 | CSV file manifest | `ctrl.file_ingestion_manifest` and ADF per-file Copy loop | Tracks source file versions through IN_PROGRESS, COPIED, PROCESSED, and FAILED states |
 | Databricks transformation | Bronze-to-Silver notebook | Applies configured FULL, APPEND, and version-aware MERGE strategies; validates source/target keys and schema |
 | Calendar | Calendar preparation notebook | Reusable date dimension |
-| Gold | Patient 360, hospital daily summary, lab test trends notebooks | Dataset-specific analytical transformations |
+| Gold | Patient 360, hospital daily summary, lab test trends notebooks | Dataset-specific SQL transformations plus required-column, grain uniqueness, and metric-bound assertions |
 | Architecture | assets/architecture-overview.png | Original project architecture diagram |
 
 ## Metadata-driven design
