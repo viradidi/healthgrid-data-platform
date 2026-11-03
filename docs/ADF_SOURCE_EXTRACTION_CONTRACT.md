@@ -89,3 +89,9 @@ The ADF activity must pass the Landing-to-Bronze notebook's `runOutput` to the S
 ## Silver write-count and audit contract
 
 The ADF Silver notebook receives the parent `adf_run_id` and validates it as a GUID. For FULL and APPEND, the returned count is the number of input rows successfully written. For an initial MERGE target creation, it is the number of rows used to create the target. For an existing Delta MERGE, the notebook tags the transaction with a commit marker containing the ADF run ID, table, and landing batch, then reads the matching Delta history entry. The returned `records_written` is the sum of `numTargetRowsInserted` and `numTargetRowsUpdated`; stale source versions and equal-version identical replays are excluded. Missing or ambiguous commit evidence or missing required metrics fails the activity rather than falling back to the source row count. The ADF audit update stores this notebook output in `ctrl.audit_log.records_written`.
+
+## Silver-to-Gold materialization and audit contract
+
+The Gold dispatcher selects active `SILVER_TO_GOLD` metadata rows and resolves each configured `gold_table_name` to `/Shared/HealthGrid/Gold/NB_<gold_table_name>`. Each current Gold notebook performs a full `CREATE OR REPLACE TABLE` rebuild, validates the materialized output schema, declared grain, and metric bounds, then returns the final table row count. ADF writes that result to `ctrl.audit_log.records_written`. For this stage, the count means output dataset cardinality after a successful rebuild; it is not a net changed-row count against the previous table version.
+
+When a Gold notebook fails, the table-stage failure audit update runs. The explicit pipeline Fail activity depends on that audit update succeeding; if the audit update itself fails, the activity failure already fails the ForEach iteration and the run remains visible in ADF activity history.
