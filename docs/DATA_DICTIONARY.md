@@ -243,51 +243,64 @@ Gold reporting uses the calendar to enrich date-based metrics and provide consis
 
 **Grain:** One intended row per patient (patient_id).
 
-**Inputs:** Silver patients, hospitals, insurance providers, and laboratory results.
+**Inputs:** Silver patients, hospitals, insurance_providers, and lab_results.
 
-**Measures and attributes include:**
-- Patient demographics and calculated age.
-- Registered hospital and hospital name.
-- Insurance provider identifier and name.
-- Total laboratory tests.
-- Abnormal and critical test counts.
-- Most recent laboratory test date.
+**Attributes and measures:**
+- Patient identifiers, demographic fields, and registered location.
+- Registered hospital ID/name and insurance-provider ID/name.
+- total_tests: count of Silver laboratory events for the patient.
+- abnormal_test_count and critical_test_count: counts of events carrying those source status labels.
+- last_test_date: maximum laboratory test_date for the patient.
+- age: FLOOR(datediff(current_date(), date_of_birth) / 365.25), calculated when the Gold notebook rebuilds the table.
 
-**Modeling rule:** Laboratory results are aggregated by patient before joining to the patient entity. This prevents multiple laboratory events from multiplying the patient-level output rows.
+**Modeling rules and considerations:**
+- Laboratory results are aggregated by patient before joining to the patient entity. This prevents multiple laboratory events from multiplying patient rows.
+- Hospital, provider, and laboratory activity are left-joined so a patient remains in the output when a lookup or laboratory record is absent. Missing enrichment remains NULL; missing lab counts are set to zero and the last test date remains NULL.
+- The intended grain assumes hospital and insurance-provider identifiers are unique in their Silver reference tables. The notebook now checks the resulting patient key is non-null and unique, so duplicate lookup keys that multiply a patient row fail the notebook contract.
+- Age is an approximate whole-year calculation and represents age at the time of the rebuild, not a continuously refreshed value. The table must be rebuilt to recalculate age.
 
 ### 7.2 gold.hospital_daily_summary
 
 **Grain:** One row per hospital and test date (hospital_id, summary_date).
 
-**Inputs:** Silver laboratory results, hospitals, and calendar.
+**Inputs:** Silver lab_results, hospitals, and calendar.
 
-**Measures and attributes include:**
-- Hospital name and date attributes.
-- Total tests.
-- Distinct patients tested.
-- Distinct active doctors represented in the test activity.
-- Abnormal and critical test counts.
-- Abnormal and critical rates.
-- Previous observed daily test volume.
-- Percentage change from the previous observed daily test volume.
+**Attributes and measures:**
+- Hospital name and calendar date attributes (day_name, is_weekend).
+- total_tests: count of lab-result events for the hospital/date.
+- unique_patients_tested: distinct patient IDs represented in those events.
+- active_doctor_count: distinct doctor IDs represented in those events; this is not a count of the hospital's full doctor roster.
+- Abnormal and critical event counts, using the source result_status labels.
+- abnormal_rate_pct and critical_rate_pct: corresponding status count divided by total tests, multiplied by 100 and rounded to two decimal places.
+- prev_day_total_tests: previous available summary row's test count for that hospital.
+- test_volume_change_pct: relative change, (current total - previous total) / previous total * 100, rounded to two decimals.
 
-The previous-day comparison is based on the previous available row for that hospital in the ordered result set, not necessarily a calendar date with zero activity.
+**Time-series interpretation:** The SQL uses LAG over the dates present for each hospital. It does not create rows for dates with no laboratory events. Therefore, the previous-row values compare against the previous available observation, which may not be the immediately preceding calendar day. The legacy output column name prev_day_total_tests is retained for compatibility; interpret it as the previous observed date. The first observed row, or a row whose previous total is zero, has a NULL percentage change.
 
 ### 7.3 gold.lab_test_trends
 
 **Grain:** One row per test name and calendar month (test_name, year, month).
 
-**Input:** Silver laboratory results, enriched with calendar attributes.
+**Inputs:** Silver lab_results, enriched with calendar month attributes.
 
-**Measures and attributes include:**
-- Test name, year, month, month name, and quarter.
-- Total tests.
-- Abnormal and critical test counts.
-- Abnormal and critical rates.
-- Previous observed month's abnormal rate.
-- Change in abnormal rate versus the previous observed month.
+**Attributes and measures:**
+- Test name, year, month number, month name, and quarter.
+- Total tests, abnormal test count, and critical test count for each test/month.
+- abnormal_rate_pct and critical_rate_pct: corresponding status count divided by monthly total tests, multiplied by 100 and rounded to two decimal places.
+- prev_month_abnormal_rate_pct: abnormal rate from the previous available monthly row for the same test.
+- abnormal_rate_change_pct: current abnormal rate minus the previous available abnormal rate, rounded to two decimal places.
 
-The previous-month comparison is based on the previous available monthly row for each test name.
+**Time-series interpretation:** The SQL uses LAG over months present for each test. It does not create zero-activity month rows, so the previous observation may be earlier than the immediately preceding calendar month. Despite the output suffix _pct, abnormal_rate_change_pct is a percentage-point difference (for example, 12.00% to 15.00% produces +3.00 percentage points), not a relative percent change. The first observed month has NULL prior-rate/change values.
+
+### 7.4 Gold notebook output contracts
+
+Before each notebook returns its row count, it now checks:
+- Required output columns are present.
+- Grain keys are non-null and unique (patient_id; hospital_id, summary_date; or test_name, year, month).
+- Counts are non-negative and do not exceed the corresponding total-test denominator.
+- Rate percentages are between 0 and 100; the abnormal-rate percentage-point change is between -100 and +100.
+
+These checks execute inside Databricks after the table rebuild. They are present in the repository, but require a restored Databricks environment and representative data to obtain runtime pass evidence. Static CI does not execute Spark SQL or these DataFrame assertions.
 
 ## 8. Key relationship and grain rules
 
