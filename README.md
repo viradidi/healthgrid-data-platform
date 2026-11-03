@@ -180,6 +180,7 @@ The control framework includes:
 | [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
 | [CSV file ingestion manifest](docs/FILE_INGESTION_MANIFEST.md) | Per-file identity, manifest states, replay protection, and recovery procedure |
+| [Source fixture contract](docs/SOURCE_FIXTURE_CONTRACT.md) | PostgreSQL fixture execution order, one-time update guards, CSV snapshot/additive semantics, and expected counts |
 | [Notification payload contract](docs/NOTIFICATION_CONTRACT.md) | ADF-to-Logic Apps request fields, status semantics, and external consumer validation |
 
 ## Repository validation
