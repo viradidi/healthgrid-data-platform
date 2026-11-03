@@ -81,3 +81,7 @@ A static workflow pass is necessary repository evidence; a live ADF/Databricks r
 ## Landing batch file discovery contract
 
 The Landing-to-Bronze notebook lists only the exact batch folder selected by ADF. It ignores directories and hidden/Spark marker files, then accepts only `.csv` files for CSV metadata or `.parquet` files for Parquet metadata (an omitted format retains the Parquet default). Visible files with an unexpected extension fail the batch rather than being silently treated as an empty extract. A folder with no eligible data files follows the documented NO_DATA rules; a missing landing volume or access failure remains a deployment/runtime error.
+
+## Bronze-to-Silver status handoff
+
+The ADF activity must pass the Landing-to-Bronze notebook's `runOutput` to the Silver notebook's required `landing_status` widget. The only accepted values are `DATA` and `NO_DATA`. A `NO_DATA` batch exits before reading or writing Silver and returns a zero processed-record count; the parent pipeline does not advance a PostgreSQL watermark for that result. A missing, blank, or unknown status fails closed. This prevents a direct or misconfigured Silver notebook invocation from assuming that a batch contains data.
