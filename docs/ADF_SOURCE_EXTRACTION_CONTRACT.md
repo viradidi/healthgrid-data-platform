@@ -77,3 +77,7 @@ Use the scenarios in [the Validation Plan](VALIDATION_PLAN.md), particularly ADF
 - Audit outcome and before/after source, Bronze, and Silver counts.
 
 A static workflow pass is necessary repository evidence; a live ADF/Databricks run and data reconciliation are separate acceptance evidence.
+
+## Landing batch file discovery contract
+
+The Landing-to-Bronze notebook lists only the exact batch folder selected by ADF. It ignores directories and hidden/Spark marker files, then accepts only `.csv` files for CSV metadata or `.parquet` files for Parquet metadata (an omitted format retains the Parquet default). Visible files with an unexpected extension fail the batch rather than being silently treated as an empty extract. A folder with no eligible data files follows the documented NO_DATA rules; a missing landing volume or access failure remains a deployment/runtime error.
