@@ -975,6 +975,30 @@ jobs:
                   for required in required_input_checks[model_name]:
                       if required not in model_source:
                           errors.append(f"{model_name} is missing Gold input quality check: {required}.")
+              # README, artifact inventory, and runbook must describe the same Gold publication guard.
+              gold_docs = {
+                  "README.md": [
+                      "Before each `CREATE OR REPLACE TABLE`",
+                      "Gold now fails closed on duplicate event IDs",
+                      "not automatically deduplicating Silver",
+                  ],
+                  "docs/ARTIFACT_AUDIT.md": [
+                      "pre-publication input-integrity checks",
+                      "unique laboratory event IDs",
+                      "not Silver deduplication",
+                  ],
+                  "docs/OPERATIONS_RUNBOOK.md": [
+                      "Fresh source initialization",
+                      "does not drop existing source tables",
+                      "duplicate `lab_result_id`",
+                  ],
+              }
+              for doc_path, required_phrases in gold_docs.items():
+                  doc_text = Path(doc_path).read_text(encoding="utf-8") if Path(doc_path).is_file() else ""
+                  for phrase in required_phrases:
+                      if phrase not in doc_text:
+                          errors.append(f"{doc_path} is missing current implementation/operational statement: {phrase}")
+
               gold_fail_update = find_activity(gold_pipeline, "Update Fialed Status")
               gold_fail_terminator = find_activity(gold_pipeline, "Update pipeline as failed")
               if not gold_fail_update or not gold_fail_terminator:
