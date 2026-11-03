@@ -37,14 +37,14 @@ Useful queries:
 ```sql
 SELECT table_id, source_system, source_table_name,
        bronze_table_name, silver_table_name, gold_table_name,
-       load_type, watermark_column, merge_keys, stage, is_active
+       load_type, watermark_column, watermark_lookback_minutes, merge_keys, stage, is_active
 FROM ctrl.table_config
 WHERE is_active = 1
 ORDER BY stage, source_system, table_id;
 
 SELECT c.table_id, c.source_system, c.source_table_name,
-       c.load_type, c.watermark_column, w.watermark_value,
-       w.last_updated_timestamp
+       c.load_type, c.watermark_column, c.watermark_lookback_minutes,
+       w.watermark_value, w.last_updated_timestamp
 FROM ctrl.table_config AS c
 LEFT JOIN ctrl.watermark AS w ON c.table_id = w.table_id
 WHERE c.is_active = 1 AND c.load_type IN ('APPEND','MERGE');
@@ -95,14 +95,17 @@ The source is extracted without a watermark predicate. Silver uses overwrite mod
 For the ADLS CSV lab-results feed, the file manifest selects new file versions and Silver appends the corresponding batch. `reported_at` is a business event-time field, not the ADF file-selection checkpoint. Exact processed file versions are skipped, but a changed whole-file snapshot is a new version and can reappend rows that existed in the prior version. The feed should be immutable/additive or have a row-level deduplication policy.
 
 ### MERGE
-For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at` and `patient_id`; ADF passes the metadata `watermark_column` into the Silver notebook as its source-version field.
+For the PostgreSQL patients source, the timestamp watermark selects changes and configured merge keys identify target rows. The current patient configuration uses `updated_at`, `patient_id`, and a five-minute `watermark_lookback_minutes` overlap; ADF passes `watermark_column` into the Silver notebook as its source-version field.
 
 Before mutation, the notebook rejects null or duplicate source keys, null source versions, null/duplicate target keys, null target versions, and source/target schema mismatches. Matched rows update only when the incoming version is newer. Older versions are skipped and counted. Equal-version rows with unchanged business values are no-ops; equal-version rows with changed business values fail.
 
 **Recovery:** Do not bypass a failed MERGE validation by deleting or deduplicating rows automatically. Inspect the source batch and target rows for the reported keys, identify the authoritative source version, correct/reconcile the underlying records, and rerun the affected table through the normal pipeline. If the target contains duplicate keys or schema drift, use a reviewed repair or migration before restarting. The ADF watermark should not be advanced manually until the corrected batch has reached Silver.
 
-### Checkpoint caution
-For timestamp-watermarked PostgreSQL sources, the exported inner pipeline advances the watermark to `SYSUTCDATETIME()` after the Bronze-to-Silver notebook succeeds. It does not calculate the maximum source timestamp actually observed in the batch. Source extraction uses a strict greater-than predicate. ADLS CSV feeds do not use `ctrl.watermark`; their selection state is stored in `ctrl.file_ingestion_manifest`.
+### Checkpoint behavior
+
+At the start of each inner-pipeline run, ADF captures a fixed UTC upper bound. For PostgreSQL incremental sources, it reads from the inclusive lower bound `previous watermark - watermark_lookback_minutes` through the exclusive captured upper bound. The patient metadata is seeded with a five-minute overlap. After Bronze-to-Silver succeeds, the checkpoint advances to the captured upper bound, not pipeline completion time; the SQL update is monotonic and cannot move a newer checkpoint backwards. ADLS CSV feeds do not use `ctrl.watermark`; their selection state is stored in `ctrl.file_ingestion_manifest`.
+
+The overlap intentionally re-reads some patient records. This is expected; the version-aware MERGE must treat identical equal-version rows as no-ops. It mitigates short visibility delays and some backdated updates, but it cannot guarantee capture of changes that arrive more than five minutes late. Hard deletes are not detected.
 
 Before manually advancing or repairing a checkpoint, establish:
 - The last complete source interval.
@@ -198,14 +201,14 @@ Also reconcile patient lab aggregates, hospital daily totals, and monthly test t
 - **Audit identity:** one row is retained per `(adf_run_id, table_id, stage)`. Retries reset that row to IN_PROGRESS; the design does not preserve a separate history row for every retry attempt. Use ADF run/activity history for attempt-level detail.
 - **Audit migration:** on an existing control database, pause pipelines and run `migrate_audit_log_unique_key.sql`. It fails safely if duplicate natural keys already exist; reconcile duplicates manually and rerun. Do not delete audit history automatically.
 - **Master dependencies:** Gold requires both source branches to be Succeeded. The notification branch intentionally uses Completed after Gold so it can report either outcome. Validate this behavior in the deployed factory with failure-injection tests.
-- **Watermark calculation:** checkpoint uses current UTC time rather than the maximum source timestamp processed. Test late arrivals and source clock differences.
-- **Strict watermark predicate:** equal-timestamp changes and precision boundaries need explicit handling.
+- **Watermark interval:** extraction uses a half-open bounded interval with an inclusive lower overlap and exclusive run-start upper bound. Revalidate equal-boundary behavior, timestamp precision, and checkpoint monotonicity with overlapping runs.
+- **Lookback limit:** the patient source has a five-minute overlap; a change that becomes visible or is backdated beyond that window can still be missed.
 - **CSV manifest:** exact file versions are tracked by table, source path/name, last-modified time, size, and optional content MD5. Only `PROCESSED` versions are skipped; unresolved prior-run `IN_PROGRESS`/`COPIED` versions fail closed for manual reconciliation. This is a conservative recovery gate, not a distributed exactly-once transaction.
 - **CSV file replacement:** a changed file version is treated as a new delivery. APPEND can duplicate rows if a partner overwrites a whole file; current feed semantics should remain immutable/additive or require row-level deduplication.
 - **Manifest scale:** ADF Get Metadata child-item output is limited to 4 MB; partition large source directories or adopt storage inventory/event-driven ingestion when necessary.
 - **APPEND replay:** PostgreSQL/other APPEND replay and changed CSV versions still require a defined row-level deduplication or replacement policy.
 - **MERGE source uniqueness:** validate one source row per key and deterministic ordering.
-- **No CDC contract:** hard deletes and late-arriving updates need separate policies.
+- **No CDC contract:** hard deletes are not captured. The lookback is a bounded mitigation, not CDC or a no-loss guarantee; use a source delete contract or log-based CDC if those guarantees are required.
 - **Gold rebuilds:** Gold notebooks replace their targets rather than incrementally merging changes.
 - **No-data handling:** empty FULL batches fail before Silver overwrite; empty incremental batches skip Silver and checkpoint updates and are recorded as successful with zero rows when the Copy activity completes and the notebook can inspect the resulting landing path. ADF Copy no-file errors that fail the Copy activity occur before the notebook and still need a separate source-branch handling decision and runtime test.
 - **Schema evolution:** the current Landing-to-Bronze policy rejects field additions, removals, or data-type changes against an existing Bronze table. This is intentional fail-closed behavior; schema changes require a reviewed migration and updated validation evidence.
