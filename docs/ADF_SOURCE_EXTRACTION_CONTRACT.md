@@ -69,7 +69,7 @@ The pipeline's Copy completion and notebook output must be inspected separately.
 
 ## Runtime validation evidence
 
-Use the scenarios in [the Validation Plan](VALIDATION_PLAN.md), particularly ADF-18 through ADF-23 and WMR-01 through WMR-16. Retain:
+Use the scenarios in [the Validation Plan](VALIDATION_PLAN.md), particularly ADF-18 through ADF-24 and WMR-01 through WMR-16. Retain:
 - Selected table ID, source system, stage, load type, and relevant configuration values.
 - Generated/executed PostgreSQL query and the actual source Copy activity output.
 - Previous checkpoint, configured lookback, captured upper bound, selected row count, and post-run checkpoint.
