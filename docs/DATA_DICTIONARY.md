@@ -159,12 +159,12 @@ Timestamp watermark rows are seeded for PostgreSQL incremental configurations. A
 | table_id | Reference to the relevant metadata configuration |
 | stage | Processing stage |
 | status | IN_PROGRESS, SUCCESS, or FAILED |
-| records_written | Reported output record count where available |
+| records_written | Logical output rows written by the stage. For SOURCE_TO_SILVER, FULL and APPEND report successfully written input rows; an initial MERGE load reports its initial target rows; an existing Delta MERGE reports inserted plus updated target rows, excluding stale and equal-version no-op records. NO_DATA reports zero. |
 | start_time | Stage start time |
 | end_time | Stage completion time |
 | created_timestamp | Audit record creation time |
 
-The audit table records processing status per configured object and stage, rather than relying only on a single overall pipeline status. A unique constraint on `(adf_run_id, table_id, stage)` enforces one summary row per parent run, object, and stage. Start activities use an idempotent upsert; a retry resets the same row to IN_PROGRESS rather than adding another row. This is a latest-attempt summary, while detailed retry history remains in ADF run/activity history.
+The audit table records processing status per configured object and stage, rather than relying only on a single overall pipeline status. For SOURCE_TO_SILVER, `records_written` is not the Bronze source-row count for an existing MERGE: it is derived from the identified Delta commit's `numTargetRowsInserted` plus `numTargetRowsUpdated` operation metrics. A per-commit metadata marker combines the ADF run ID, table, and landing batch so another table write cannot be mistaken for this run's result. Stale rows and equal-version identical payloads contribute zero written rows. If the exact commit or required metrics cannot be identified, the notebook fails instead of publishing a misleading count. A unique constraint on `(adf_run_id, table_id, stage)` enforces one summary row per parent run, object, and stage. Start activities use an idempotent upsert; a retry resets the same row to IN_PROGRESS rather than adding another row. This is a latest-attempt summary, while detailed retry history remains in ADF run/activity history.
 
 ### 3.4 ctrl.file_ingestion_manifest
 
