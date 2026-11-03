@@ -504,6 +504,9 @@ jobs:
               )
               if 'source_system == "adls_csv"' not in landing_source or 'dbutils.notebook.exit("NO_DATA")' not in landing_source:
                   errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
+              if 'reason == "No landing data files found for this batch."' not in landing_source:
+                  errors.append("Landing notebook must preserve FULL CSV no-new-version NO_DATA semantics after file filtering.")
+                  errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
 
               # Static Landing-to-Bronze batch, metadata, and schema contracts.
               required_landing_contracts = {
