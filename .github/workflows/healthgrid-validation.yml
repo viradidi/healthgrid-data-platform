@@ -117,6 +117,7 @@ jobs:
               "docs/DEPLOYMENT.md",
               "docs/ARTIFACT_AUDIT.md",
               "docs/FILE_INGESTION_MANIFEST.md",
+              "docs/NOTIFICATION_CONTRACT.md",
           ]
           for name in required_docs:
               if not Path(name).is_file():
@@ -574,6 +575,46 @@ jobs:
               for parameter in ("postgres_status", "adls_status", "gold_status"):
                   if f"pipeline().parameters.{parameter}" not in header_value:
                       errors.append(f"Human-readable email header must display {parameter}.")
+
+              notification_contract_path = Path("docs/NOTIFICATION_CONTRACT.md")
+              if not notification_contract_path.is_file():
+                  errors.append("Notification producer contract documentation is missing.")
+              else:
+                  notification_contract = notification_contract_path.read_text(encoding="utf-8")
+                  if "Logic Apps workflow/definition is not included" not in notification_contract:
+                      errors.append("Notification contract must disclose that the external Logic Apps consumer is not checked in.")
+              if '"adf_run_id":"@{pipeline().parameters.adf_run_id}"' not in email_body_expression:
+                  errors.append("Notification payload must include the parent ADF run ID at the root.")
+              for required_field in ('"email_receipients":', '"pipeline_statuses":', '"status_table":'):
+                  if required_field not in email_body_expression:
+                      errors.append(f"Notification payload is missing producer contract field {required_field}.")
+              email_read_activity = next(
+                  (a for a in email_document["properties"]["activities"] if a.get("name") == "Read All tables status"),
+                  {}
+              )
+              email_read_query = email_read_activity.get("typeProperties", {}).get("source", {}).get("sqlReaderQuery", {}).get("value", "")
+              if "SELECT *" in email_read_query.upper():
+                  errors.append("Notification audit lookup must explicitly project stable audit columns.")
+              for required in ("audit_id", "adf_run_id", "table_id", "stage", "status", "records_written", "start_time", "end_time", "created_timestamp", "ORDER BY table_id, stage"):
+                  if required not in email_read_query:
+                      errors.append(f"Notification audit lookup is missing stable projection/order field: {required}")
+              if "WHERE adf_run_id = '@{pipeline().parameters.adf_run_id}'" not in email_read_query:
+                  errors.append("Notification audit lookup must be scoped to the parent ADF run ID.")
+              failed_count_activity = next(
+                  (a for a in email_document["properties"]["activities"] if a.get("name") == "Check overall failed count"),
+                  {}
+              )
+              failed_count_query = failed_count_activity.get("typeProperties", {}).get("source", {}).get("sqlReaderQuery", {}).get("value", "")
+              if "status != 'SUCCESS'" not in failed_count_query or "pipeline().parameters.adf_run_id" not in failed_count_query:
+                  errors.append("Notification failed-count query must count every non-SUCCESS audit state for the parent run.")
+              web_activity = next(
+                  (a for a in email_document["properties"]["activities"] if a.get("name") == "Send Email"),
+                  {}
+              )
+              if web_activity.get("typeProperties", {}).get("httpRequestTimeout") != "00:02:00":
+                  errors.append("Notification Web Activity must use the documented two-minute HTTP response timeout.")
+              if web_activity.get("policy", {}).get("retry") != 0:
+                  errors.append("Notification Web Activity retries must remain disabled until receiver-side run-ID deduplication is implemented.")
 
               # Reject empty metadata results instead of succeeding with an empty ForEach.
               for document, label in ((main_pipeline, "source"), (gold_pipeline, "Gold")):
