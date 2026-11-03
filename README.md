@@ -163,7 +163,7 @@ The control framework includes:
 |---|---|
 | [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Non-destructive fresh initialization, explicitly gated source reset, seed data, incremental changes, and patient timestamp-trigger migration |
 | [ADLS CSV source data](<01_Sources%20Data/02_adls_csv/>) | Initial and incremental partner feed samples |
-| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, configurable lookback migration, CSV file manifest, audit setup, and safe audit-key migration |
+| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Fresh control initialization, explicitly gated reset, PostgreSQL watermark/lookback migration, CSV file manifest, and audit-key migration |
 | [Gold STTM workbook](<03_Gold%20STTM/sttm_silver_to_gold.xlsx>) | Source-to-target mapping for analytical outputs |
 | [Azure Data Factory exports](<04_Azure%20Data%20Factory%20Repository/>) | Factory, linked services, datasets, and pipeline JSON |
 | [Databricks notebooks](<05_Databricks_Repository/>) | Landing, Bronze-to-Silver, calendar, and Gold transformations |
