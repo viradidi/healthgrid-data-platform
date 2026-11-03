@@ -253,3 +253,32 @@ Before deleting an environment, preserve repository exports, configuration templ
 | Cleanup/decommission date | |
 
 Do not fill deployment records with assumed resource IDs, dates, run IDs, or test results. Record observed values only.
+
+## 11. Optional GitHub Actions Azure integration workflow
+
+The repository includes `.github/workflows/healthgrid-azure-integration.yml`. It is manual-only and starts the ADF `PL_MASTER` pipeline after an explicit confirmation. The workflow polls the ADF run and returns success only when the run reaches `Succeeded`; it requests cancellation if the monitoring window expires. ADF is responsible for invoking the configured Databricks notebook activities.
+
+Configure the GitHub Environment **`healthgrid-integration`** before using this workflow:
+
+| Environment configuration | Name | Purpose |
+|---|---|---|
+| Secret | `AZURE_CLIENT_ID` | Microsoft Entra application/client ID |
+| Secret | `AZURE_TENANT_ID` | Microsoft Entra tenant ID |
+| Secret | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+| Variable | `HEALTHGRID_AZURE_RESOURCE_GROUP` | Resource group containing the target factory |
+| Variable | `HEALTHGRID_AZURE_DATA_FACTORY_NAME` | Name of the deployed DEV Data Factory |
+
+Configure workload identity federation on the Microsoft Entra application/service principal with:
+- Issuer: `https://token.actions.githubusercontent.com`
+- Subject: `repo:viradidi/healthgrid-data-platform:environment:healthgrid-integration`
+- Audience: `api://AzureADTokenExchange`
+
+Grant the identity only the permissions needed on the target Data Factory resource. Prefer a custom role over broad subscription or resource-group Contributor access. The custom role should allow factory/pipeline/run reads, `Microsoft.DataFactory/factories/pipelines/createrun/action`, and `Microsoft.DataFactory/factories/pipelineruns/cancel/action`. The cancellation action is used only when this workflow's monitoring window expires. Do not grant permission to edit or publish pipelines for a workflow that only needs to execute and monitor them.
+
+Where available, configure the GitHub Environment with required reviewers so a person reviews the deployment target before Azure authentication. The workflow itself also requires the `confirm_run` input to be checked. Do not change it to run on pushes or pull requests.
+
+**Execution boundary:** `PL_MASTER` runs the active source metadata and downstream Gold processing. It can write to Bronze/Silver/Gold targets and invoke the notification branch. Run it only against a disposable DEV environment containing synthetic data. Before dispatch, verify source connectivity, linked services, secrets, Unity Catalog objects, notebook paths, compute, and metadata configuration.
+
+A successful workflow run proves that the monitored ADF master pipeline reached a successful terminal state. It does not replace the scenario-level tests, activity-output review, audit/watermark inspection, or row-count and Gold-grain reconciliation in `docs/VALIDATION_PLAN.md`.
+
+The original Azure resources were decommissioned after successful project completion to control cost. The integration workflow is therefore committed as a gated capability, not as evidence of a current live Azure test.
