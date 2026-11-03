@@ -85,3 +85,7 @@ The Landing-to-Bronze notebook lists only the exact batch folder selected by ADF
 ## Bronze-to-Silver status handoff
 
 The ADF activity must pass the Landing-to-Bronze notebook's `runOutput` to the Silver notebook's required `landing_status` widget. The only accepted values are `DATA` and `NO_DATA`. A `NO_DATA` batch exits before reading or writing Silver and returns a zero processed-record count; the parent pipeline does not advance a PostgreSQL watermark for that result. A missing, blank, or unknown status fails closed. This prevents a direct or misconfigured Silver notebook invocation from assuming that a batch contains data.
+
+## Silver write-count and audit contract
+
+The ADF Silver notebook receives the parent `adf_run_id` and validates it as a GUID. For FULL and APPEND, the returned count is the number of input rows successfully written. For an initial MERGE target creation, it is the number of rows used to create the target. For an existing Delta MERGE, the notebook tags the transaction with a commit marker containing the ADF run ID, table, and landing batch, then reads the matching Delta history entry. The returned `records_written` is the sum of `numTargetRowsInserted` and `numTargetRowsUpdated`; stale source versions and equal-version identical replays are excluded. Missing or ambiguous commit evidence or missing required metrics fails the activity rather than falling back to the source row count. The ADF audit update stores this notebook output in `ctrl.audit_log.records_written`.
