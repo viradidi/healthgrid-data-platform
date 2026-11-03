@@ -519,6 +519,9 @@ jobs:
                   "case-insensitive existing schema comparison": "field.name.lower(): field.dataType.simpleString()",
                   "technical metadata schema check": "expected_technical_types",
                   "exact landing batch replay guard": 'filter(F.col("landing_timestamp") == landing_timestamp)',
+                  "hidden and marker file exclusion": 'not entry.name.startswith((\".\", \"_\"))',
+                  "configured extension filtering": 'entry.name.lower().endswith(expected_suffix)',
+                  "unexpected landing file rejection": "if unexpected_files:",
               }
               for label, required in required_landing_contracts.items():
                   if required not in landing_source:
