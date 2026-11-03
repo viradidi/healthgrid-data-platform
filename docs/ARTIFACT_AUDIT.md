@@ -13,7 +13,7 @@ This is a static review of the committed implementation and documentation. It is
 
 | Area | Assets | Purpose |
 |---|---|---|
-| PostgreSQL | Source DDL, UTC timestamp defaults, patient `updated_at` trigger, and incremental-load SQL | Hospital, doctor, and patient source entities with reliable update timestamp maintenance |
+| PostgreSQL | Source DDL, UTC timestamp defaults, patient `updated_at` trigger/migration, and incremental-load SQL | Hospital, doctor, and patient source entities with reliable update timestamp maintenance |
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
 | Control metadata | Control-table DDL, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
