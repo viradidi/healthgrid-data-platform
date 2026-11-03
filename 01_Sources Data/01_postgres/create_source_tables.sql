@@ -1,12 +1,24 @@
 /* =====================================================================
    HealthGrid — Synthetic Hospital Operations Source Tables
-   Target: Neon Postgres (source system, schema: public)
-   Creates hospitals, doctors, patients + seed sample data.
+   Target: PostgreSQL (source system, schema: public)
+   Fresh initialization only: creates source tables and synthetic seed data.
+   This script refuses to run when any target table already exists.
+   For an intentional disposable-environment reset, use reset_source_tables.sql
+   with the explicit session confirmation described in that file.
    ===================================================================== */
 
-DROP TABLE IF EXISTS patients;
-DROP TABLE IF EXISTS doctors;
-DROP TABLE IF EXISTS hospitals;
+DO $healthgrid_init_guard$
+BEGIN
+    IF to_regclass('public.hospitals') IS NOT NULL
+       OR to_regclass('public.doctors') IS NOT NULL
+       OR to_regclass('public.patients') IS NOT NULL THEN
+        RAISE EXCEPTION
+            'HealthGrid source tables already exist. No objects were dropped; review the database or use the separately gated reset_source_tables.sql only in a disposable environment.';
+    END IF;
+END;
+$healthgrid_init_guard$;
+
+SET search_path TO public;
 
 /* ---------------------------------------------------------------------
    1. hospitals — hospital/facility master data (FULL load)
@@ -66,9 +78,8 @@ BEGIN
 END;
 $healthgrid$;
 
-DROP TRIGGER IF EXISTS trg_patients_updated_at_utc ON patients;
 CREATE TRIGGER trg_patients_updated_at_utc
-BEFORE UPDATE ON patients
+BEFORE UPDATE ON public.patients
 FOR EACH ROW
 EXECUTE FUNCTION public.set_patients_updated_at_utc();
 
