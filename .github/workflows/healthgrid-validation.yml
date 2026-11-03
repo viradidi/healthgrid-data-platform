@@ -565,6 +565,16 @@ jobs:
                   if f"pipeline().parameters.{parameter}" not in email_body_expression:
                       errors.append(f"Email payload must expose {parameter}.")
 
+              email_header_activity = next(
+                  (a for a in email_document["properties"]["activities"] if a.get("name") == "Prepare Email body Header"),
+                  {}
+              )
+              email_header_expression = email_header_activity.get("typeProperties", {}).get("value", {})
+              header_value = email_header_expression.get("value", "") if isinstance(email_header_expression, dict) else ""
+              for parameter in ("postgres_status", "adls_status", "gold_status"):
+                  if f"pipeline().parameters.{parameter}" not in header_value:
+                      errors.append(f"Human-readable email header must display {parameter}.")
+
               # Reject empty metadata results instead of succeeding with an empty ForEach.
               for document, label in ((main_pipeline, "source"), (gold_pipeline, "Gold")):
                   top = {a.get("name"): a for a in document["properties"]["activities"]}
