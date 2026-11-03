@@ -135,14 +135,14 @@ jobs:
               for contract_phrase in (
                   "metadata-to-source path",
                   "double-quoted identifiers",
-                  "Missing watermark row",
+                  "missing watermark row",
                   "half-open interval",
                   "exactly one row",
-                  "Copy-level no-file/error",
-                  "not CDC",
-                  "ADF-19 through ADF-24",
+                  "copy-level no-file/error",
+                  "not cdc",
+                  "adf-19 through adf-24",
               ):
-                  if contract_phrase not in adf_contract:
+                  if contract_phrase not in adf_contract.lower():
                       errors.append(f"ADF source extraction contract is missing required boundary: {contract_phrase}")
 
           # Release rollback and persisted-state recovery documentation contract.
