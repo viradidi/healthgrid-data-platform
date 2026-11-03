@@ -103,19 +103,24 @@ Matched rows are updated only when the incoming source version is strictly newer
 
 ## 9. Gold analytical modeling
 
-**Decision:** Publish three purpose-built Gold datasets through a metadata-driven Gold orchestration stage rather than exposing raw Silver tables directly to reporting consumers.
+**Decision:** Publish three purpose-built Gold datasets through a metadata-driven orchestration stage rather than exposing raw Silver tables directly to reporting consumers.
 
-- patient_360: patient-level records enriched with hospital and insurance details and pre-aggregated laboratory activity.
-- hospital_daily_summary: hospital/day laboratory volume, distinct patients, doctor counts, abnormal and critical counts and rates, and previous-day comparison.
-- lab_test_trends: monthly test volumes, abnormal and critical counts and rates, and month-over-month abnormal-rate movement.
+| Dataset | Grain | Main transformation |
+|---|---|---|
+| patient_360 | patient_id | Aggregate laboratory activity to patient grain before left-joining patient, hospital, and insurance-provider attributes |
+| hospital_daily_summary | hospital_id, summary_date | Aggregate event counts and distinct patients/doctors by hospital/date, enrich with calendar attributes, and calculate observed-row volume movement |
+| lab_test_trends | test_name, year, month | Aggregate event counts and rates by test/month and calculate observed-month abnormal-rate movement |
 
 **Grain and join considerations:**
-- patient_360 is intended to have one row per patient.
-- Laboratory activity is aggregated to patient grain before joining to patient records, preventing one patient row from multiplying by the number of laboratory tests.
-- hospital_daily_summary is grouped by hospital and test date.
-- lab_test_trends is grouped by test name and calendar month.
+- The patient model aggregates laboratory events before joining, protecting patient grain from the one-to-many event relationship. The reference joins assume unique hospital and provider IDs; a duplicate lookup can multiply patient rows and is now detected by the output-grain check.
+- The hospital model's active_doctor_count counts distinct doctor IDs found in laboratory events, not the full hospital doctor roster.
+- Both time-series models use LAG over rows that exist in the aggregate output. They do not generate missing calendar dates/months with zero measures. Thus prev_day_total_tests means previous available hospital-date observation (the legacy column name is retained), and the lab trend prior value means previous available month for that test.
+- test_volume_change_pct is relative percentage change from the prior observed hospital-date row. abnormal_rate_change_pct is the difference between two abnormal rates in percentage points, not a relative percentage change.
+- Patient age is calculated using datediff(current_date(), date_of_birth) / 365.25 when the table is rebuilt, so it is an approximate age as of rebuild time.
 
-Gold notebooks rebuild their targets using CREATE OR REPLACE TABLE. This is a full rebuild pattern, not an incremental Gold merge.
+**Gold output contracts:** Each notebook now checks required columns, non-null and unique grain keys, and basic count/rate bounds after rebuilding its table. These checks make key model assumptions executable and fail the notebook when the output violates the declared grain or metric constraints. They have not yet been executed in a restored Azure/Databricks environment; static repository CI does not constitute runtime proof.
+
+Gold notebooks rebuild their targets using CREATE OR REPLACE TABLE. This is a full rebuild pattern, not an incremental Gold merge. Validate target consistency and recovery if a notebook fails during publication; failure-injection and parallel-execution scenarios remain in the validation plan.
 
 ## 10. Calendar dimension
 
