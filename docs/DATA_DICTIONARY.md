@@ -2,7 +2,7 @@
 
 This dictionary describes the source entities, control metadata, medallion-layer responsibilities, and Gold analytical outputs in the HealthGrid repository.
 
-HealthGrid was originally named **CareSync**. Some exported Azure and Databricks artifacts retain the original name in catalog and notebook paths. These are legacy environment identifiers, not separate project components.
+HealthGrid was originally named **CareSync**. The current repository artifacts use the HealthGrid catalog, Volume, and workspace-path conventions; the former name is retained only as project history.
 
 ## 1. Platform data flow
 
@@ -303,4 +303,4 @@ The previous-month comparison is based on the previous available monthly row for
 
 ## 10. Naming note
 
-The project was initially called CareSync and was subsequently renamed HealthGrid. Some historical SQL comments, catalog names, notebook paths, and ADF references still use CareSync. When redeploying, treat these as environment-specific legacy names and align them deliberately with the target workspace. Do not infer that a legacy identifier means the corresponding pipeline was not executed successfully.
+The project was initially called CareSync and was subsequently renamed HealthGrid. The repository's technical artifacts now use HealthGrid naming conventions. During redeployment, replace only the explicit linked-service placeholders and verify that the target workspace contains the documented `/Shared/HealthGrid/` notebooks and `healthgrid` Unity Catalog objects.
