@@ -3,7 +3,7 @@
 # MAGIC %md
 # MAGIC # NB_hospital_daily_summary
 # MAGIC
-# MAGIC Builds `healthgrid.gold.hospital_daily_summary` from silver lab results with hospital and calendar enrichment, then validates daily trends and sample output.
+# MAGIC Builds `healthgrid.gold.hospital_daily_summary` and validates its schema, hospital/date grain, and metric bounds.
 
 # COMMAND ----------
 
@@ -73,7 +73,54 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Return hospital daily summary record count
+# DBTITLE 1,Return hos# COMMAND ----------
+
+# DBTITLE 1,Validate hospital daily summary output contract
+from pyspark.sql import functions as F
+
 updated_df = spark.table("healthgrid.gold.hospital_daily_summary")
 record_count = updated_df.count()
+
+required_columns = {
+    "hospital_id", "hospital_name", "summary_date", "day_name", "is_weekend",
+    "total_tests", "unique_patients_tested", "active_doctor_count",
+    "abnormal_test_count", "critical_test_count", "abnormal_rate_pct",
+    "critical_rate_pct", "prev_day_total_tests", "test_volume_change_pct",
+}
+missing_columns = sorted(required_columns - set(updated_df.columns))
+if missing_columns:
+    raise ValueError(f"hospital_daily_summary is missing required columns: {missing_columns}")
+
+if updated_df.filter(
+    F.col("hospital_id").isNull() | F.col("summary_date").isNull()
+).limit(1).count():
+    raise ValueError("hospital_daily_summary contains a null grain key.")
+
+duplicate_hospital_day = (
+    updated_df.groupBy("hospital_id", "summary_date")
+    .count()
+    .filter(F.col("count") > 1)
+    .limit(1)
+    .count()
+)
+if duplicate_hospital_day:
+    raise ValueError("hospital_daily_summary violates its one-row-per-hospital/date grain.")
+
+invalid_metrics = updated_df.filter(
+    (F.col("total_tests") < 0)
+    | (F.col("unique_patients_tested") < 0)
+    | (F.col("unique_patients_tested") > F.col("total_tests"))
+    | (F.col("active_doctor_count") < 0)
+    | (F.col("active_doctor_count") > F.col("total_tests"))
+    | (F.col("abnormal_test_count") < 0)
+    | (F.col("abnormal_test_count") > F.col("total_tests"))
+    | (F.col("critical_test_count") < 0)
+    | (F.col("critical_test_count") > F.col("total_tests"))
+    | (F.col("abnormal_rate_pct").isNotNull() & ((F.col("abnormal_rate_pct") < 0) | (F.col("abnormal_rate_pct") > 100)))
+    | (F.col("critical_rate_pct").isNotNull() & ((F.col("critical_rate_pct") < 0) | (F.col("critical_rate_pct") > 100)))
+).limit(1).count()
+if invalid_metrics:
+    raise ValueError("hospital_daily_summary contains invalid counts or rate percentages.")
+
+print(f"[PASS] hospital_daily_summary schema, grain, and metric checks; rows={record_count}")
 dbutils.notebook.exit(str(record_count))
