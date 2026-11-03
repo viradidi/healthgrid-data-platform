@@ -48,6 +48,25 @@ On completion, retain the ADF run ID and inspect individual activity runs, Datab
 
 The original Azure resources were decommissioned after the project was completed to control cost. Therefore, this live workflow has been added as a gated capability but has **not** been executed against a currently restored environment.
 
+## 2B. SQL initialization, reset, and migration safety tests
+
+These cases use disposable synthetic databases. A test that only inspects SQL text is not evidence that PostgreSQL or Azure SQL executed it successfully.
+
+| ID | Scenario | Test procedure | Acceptance criteria |
+|---|---|---|---|
+| SQL-01 | Fresh PostgreSQL initialization | Run `create_source_tables.sql` against an empty disposable database | Exactly the three public source tables and UTC patient trigger are created; seeded row counts match the script's generated fixtures |
+| SQL-02 | Existing PostgreSQL source protection | Add a sentinel row to an existing target table, then run `create_source_tables.sql` | Initialization fails before any DROP/CREATE or seed operation; all existing rows and objects remain unchanged |
+| SQL-03 | PostgreSQL reset without authorization | Run `reset_source_tables.sql` without the same-session custom setting | Guard raises an exception; all three source tables and their rows remain present |
+| SQL-04 | Explicit PostgreSQL reset | In a disposable database, set `healthgrid.allow_destructive_reset` to `true` on the same connection and run the reset script | Only `public.patients`, `public.doctors`, and `public.hospitals` are dropped in FK-safe order; the opt-in is reset; other schemas/objects remain |
+| SQL-05 | Fresh Azure SQL control initialization | Run `create_control_tables.sql` in an empty disposable database | Four control tables, manifest index, source metadata, Gold metadata, and initial PostgreSQL watermark are created as expected |
+| SQL-06 | Existing/partial control initialization protection | Put a sentinel record in any one target control table, then execute the full initializer with a runner that continues after batch errors | The preflight fails; the session gate blocks every later GO-separated batch; no metadata/checkpoint/audit/manifest values are deleted or duplicated |
+| SQL-07 | Control reset without authorization | Run `drop_control_tables.sql` without the session-context flag | Script fails before DDL; all control tables and sentinel records remain |
+| SQL-08 | Explicit Azure SQL control reset | In a disposable DEV database, set the documented session context on the same SQL session and run the reset script | Four control tables are dropped in FK-safe order, the confirmation context is cleared, and the operation commits |
+| SQL-09 | Control reset failure atomicity | In a disposable database, introduce a dependency that makes the final parent-table drop fail, then execute the authorized reset | The transaction rolls back; all four control tables and their contents remain consistent |
+| SQL-10 | Watermark-lookback migration rerun | Apply `add_watermark_lookback.sql` twice and compare configuration/checkpoint state | Migration succeeds on both runs; existing watermark values are unchanged; configured lookback values are not reset on rerun |
+| SQL-11 | Audit migration duplicate/index guard | Test duplicate natural keys and an incompatible existing index with the expected index name | Migration stops before changing history or accepting an incompatible index; valid definitions are created once and a valid rerun is a no-op |
+
+
 ## 3. Metadata framework tests
 
 | ID | Scenario | Test procedure | Acceptance criteria |
