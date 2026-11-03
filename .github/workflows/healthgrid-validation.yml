@@ -397,8 +397,10 @@ jobs:
               manifest_finalization_sql = activity_sql(processed_activity)
               if "BEGIN TRY" not in manifest_finalization_sql or "BEGIN TRANSACTION" not in manifest_finalization_sql:
                   errors.append("Manifest finalization must use a transaction.")
-              if "status IN ('COPIED', 'PROCESSED')" not in manifest_finalization_sql:
-                  errors.append("Manifest finalization must allow an idempotent retry after PROCESSED.")
+              if "AND status = 'COPIED'" not in manifest_finalization_sql:
+                  errors.append("Manifest finalization must only timestamp rows on their first COPIED-to-PROCESSED transition.")
+              if "status IN ('IN_PROGRESS', 'COPIED', 'FAILED')" not in manifest_finalization_sql:
+                  errors.append("Manifest finalization must allow safe retries only after all current-run rows are resolved.")
               for required in ("status IN ('IN_PROGRESS', 'COPIED', 'FAILED')", "51034", "ROLLBACK TRANSACTION"):
                   if required not in manifest_finalization_sql:
                       errors.append(f"Manifest finalization is missing unresolved-state guard: {required}")
