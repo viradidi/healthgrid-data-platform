@@ -147,6 +147,120 @@ jobs:
           if "BLOCKED rather than PASS" not in validation_doc:
               errors.append("Release-recovery tests must distinguish blocked runtime evidence from a pass.")
 
+          # SQL initialization/reset and migration safety contracts.
+          source_init_path = Path("01_Sources Data/01_postgres/create_source_tables.sql")
+          source_reset_path = Path("01_Sources Data/01_postgres/reset_source_tables.sql")
+          control_init_path = Path("02_Metadata Table Queries/create_control_tables.sql")
+          control_reset_path = Path("02_Metadata Table Queries/drop_control_tables.sql")
+          watermark_migration_path = Path("02_Metadata Table Queries/add_watermark_lookback.sql")
+          audit_migration_path = Path("02_Metadata Table Queries/migrate_audit_log_unique_key.sql")
+
+          sql_assets = {
+              "source initializer": source_init_path,
+              "source reset": source_reset_path,
+              "control initializer": control_init_path,
+              "control reset": control_reset_path,
+              "watermark migration": watermark_migration_path,
+              "audit migration": audit_migration_path,
+          }
+          for label, path in sql_assets.items():
+              if not path.is_file():
+                  errors.append(f"Required SQL asset missing: {path}")
+
+          if all(path.is_file() for path in sql_assets.values()):
+              source_init = source_init_path.read_text(encoding="utf-8")
+              source_reset = source_reset_path.read_text(encoding="utf-8")
+              control_init = control_init_path.read_text(encoding="utf-8")
+              control_reset = control_reset_path.read_text(encoding="utf-8")
+              watermark_migration = watermark_migration_path.read_text(encoding="utf-8")
+              audit_migration = audit_migration_path.read_text(encoding="utf-8")
+
+              if re.search(r"\\bDROP\\s+TABLE\\b", source_init, re.I):
+                  errors.append("Fresh PostgreSQL source initialization must not drop existing tables.")
+              for required in (
+                  "to_regclass('public.hospitals')",
+                  "to_regclass('public.doctors')",
+                  "to_regclass('public.patients')",
+                  "RAISE EXCEPTION",
+                  "SET search_path TO public",
+              ):
+                  if required not in source_init:
+                      errors.append(f"PostgreSQL source initializer is missing its fail-closed contract: {required}")
+
+              for required in (
+                  "current_setting('healthgrid.allow_destructive_reset', true) IS DISTINCT FROM 'true'",
+                  "RESET healthgrid.allow_destructive_reset",
+                  "BEGIN;",
+                  "COMMIT;",
+                  "DROP TABLE IF EXISTS public.patients",
+                  "DROP TABLE IF EXISTS public.doctors",
+                  "DROP TABLE IF EXISTS public.hospitals",
+              ):
+                  if required not in source_reset:
+                      errors.append(f"PostgreSQL reset is missing explicit safety control: {required}")
+              if source_reset.count("DROP TABLE") != 3:
+                  errors.append("PostgreSQL reset must drop only the three named HealthGrid source tables.")
+
+              required_control_tables = (
+                  "ctrl.table_config", "ctrl.watermark", "ctrl.audit_log",
+                  "ctrl.file_ingestion_manifest",
+              )
+              for table in required_control_tables:
+                  if f"OBJECT_ID('{table}', 'U')" not in control_init:
+                      errors.append(f"Control-table initializer preflight is missing {table}.")
+              if "DROP TABLE" in control_init.upper():
+                  errors.append("Fresh Azure SQL control initialization must never drop existing control tables.")
+              if "SESSION_CONTEXT(N'healthgrid_control_init_allowed')" not in control_init:
+                  errors.append("Control initializer must gate all GO-separated batches on its session preflight.")
+              go_batches = len(re.findall(r"^GO$", control_init, re.M))
+              init_gate_checks = control_init.count("SESSION_CONTEXT(N'healthgrid_control_init_allowed')")
+              if go_batches < 2 or init_gate_checks < go_batches - 1:
+                  errors.append("Control initializer must check its session gate before every batch after the preflight.")
+              if "EXEC sys.sp_set_session_context @key = N'healthgrid_control_init_allowed', @value = NULL" not in control_init:
+                  errors.append("Control initializer must clear its internal session gate after seed completion.")
+
+              for required in (
+                  "SESSION_CONTEXT(N'healthgrid_allow_destructive_reset')",
+                  "BEGIN TRANSACTION",
+                  "COMMIT TRANSACTION",
+                  "ROLLBACK TRANSACTION",
+                  "sp_set_session_context @key = N'healthgrid_allow_destructive_reset', @value = NULL",
+              ):
+                  if required not in control_reset:
+                      errors.append(f"Azure SQL control reset is missing transaction/authorization control: {required}")
+              if control_reset.count("DROP TABLE ctrl.") != 4:
+                  errors.append("Azure SQL reset must drop exactly the four HealthGrid control tables.")
+              if not (
+                  control_reset.index("DROP TABLE ctrl.file_ingestion_manifest")
+                  < control_reset.index("DROP TABLE ctrl.audit_log")
+                  < control_reset.index("DROP TABLE ctrl.watermark")
+                  < control_reset.index("DROP TABLE ctrl.table_config")
+              ):
+                  errors.append("Azure SQL reset must drop control tables in FK-safe child-first order.")
+
+              if re.search(r"\\b(DROP\\s+TABLE|TRUNCATE\\s+TABLE|DELETE\\s+FROM\\s+ctrl\\.watermark)\\b", watermark_migration, re.I):
+                  errors.append("Watermark lookback migration must not delete/reset control data or checkpoints.")
+              if "UPDATE ctrl.watermark" in watermark_migration.upper():
+                  errors.append("Watermark lookback migration must leave existing checkpoint values unchanged.")
+              for required in ("COL_LENGTH('ctrl.table_config', 'watermark_lookback_minutes')", "watermark_lookback_minutes = 5"):
+                  if required not in watermark_migration:
+                      errors.append(f"Watermark migration is missing its guarded configuration update: {required}")
+
+              for required in (
+                  "HAVING COUNT(*) > 1",
+                  "51011",
+                  "51012",
+                  "i.is_unique = 1",
+                  "key_ordinal = 1 AND c.name = 'adf_run_id'",
+                  "key_ordinal = 2 AND c.name = 'table_id'",
+                  "key_ordinal = 3 AND c.name = 'stage'",
+                  "CREATE UNIQUE INDEX UQ_audit_log_run_table_stage",
+              ):
+                  if required not in audit_migration:
+                      errors.append(f"Audit-key migration is missing a duplicate/index-definition safeguard: {required}")
+              if re.search(r"\\b(DELETE\\s+FROM|TRUNCATE\\s+TABLE)\\s+ctrl\\.audit_log", audit_migration, re.I):
+                  errors.append("Audit-key migration must never delete or truncate audit history.")
+
           # Static contract checks for the metadata-driven ADLS CSV file manifest.
           pipeline_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_INNER.json")
           dataset_path = Path("04_Azure Data Factory Repository/dataset/DS_Csv_Binary_File.json")
