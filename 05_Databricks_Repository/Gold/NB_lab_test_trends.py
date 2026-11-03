@@ -65,9 +65,6 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Return lab test trends record count
-up# COMMAND ----------
-
 # DBTITLE 1,Validate lab test trends output contract
 from pyspark.sql import functions as F
 
