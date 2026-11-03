@@ -203,6 +203,40 @@ jobs:
               if 'source_system == "adls_csv"' not in landing_source or 'dbutils.notebook.exit("NO_DATA")' not in landing_source:
                   errors.append("Landing notebook must support the FULL CSV no-new-version no-op status.")
 
+              # Static Landing-to-Bronze batch, metadata, and schema contracts.
+              required_landing_contracts = {
+                  "blank load_type widget default": 'dbutils.widgets.text("load_type", "")',
+                  "fail-closed load strategy validation": 'normalized_load_type not in {"FULL", "APPEND", "MERGE"}',
+                  "no implicit FULL fallback": 'normalized_load_type = (load_type or "").strip().upper()',
+                  "source system identifier validation": 're.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", source_system or "")',
+                  "Bronze table identifier validation": 're.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name or "")',
+                  "landing batch identifier validation": 're.fullmatch(r"[A-Za-z0-9_-]{1,160}", landing_timestamp or "")',
+                  "file format allow-list": 'normalized_source_file_format not in {"", "csv", "parquet"}',
+                  "case-insensitive incoming column collision guard": "incoming_names_lower",
+                  "reserved Bronze metadata source-column guard": "reserved_source_columns",
+                  "case-insensitive existing schema comparison": "field.name.lower(): field.dataType.simpleString()",
+                  "technical metadata schema check": "expected_technical_types",
+                  "exact landing batch replay guard": 'filter(F.col("landing_timestamp") == landing_timestamp)',
+              }
+              for label, required in required_landing_contracts.items():
+                  if required not in landing_source:
+                      errors.append(f"Landing-to-Bronze notebook is missing {label}.")
+              if 'normalized_load_type = (load_type or "FULL").strip().upper()' in landing_source:
+                  errors.append("Landing-to-Bronze must not default missing load_type metadata to FULL.")
+              landing_activity = by_name.get("Landing to Bronze", {})
+              landing_parameters = landing_activity.get("typeProperties", {}).get("baseParameters", {})
+              expected_landing_parameters = {
+                  "source_system": "@activity('Read Table Details').output.firstRow.source_system",
+                  "table_name": "@activity('Read Table Details').output.firstRow.bronze_table_name",
+                  "landing_timestamp": "@variables('start_time')",
+                  "source_file_format": "@coalesce(activity('Read Table Details').output.firstRow.source_file_format,'')",
+                  "load_type": "@activity('Read Table Details').output.firstRow.load_type",
+              }
+              for name, expected in expected_landing_parameters.items():
+                  actual = landing_parameters.get(name, {}).get("value")
+                  if actual != expected:
+                      errors.append(f"ADF Landing-to-Bronze parameter '{name}' must be passed from the expected metadata/run context.")
+
               # Static contract checks for null-safe, version-aware Silver MERGE behavior.
               silver_notebook_path = Path("05_Databricks_Repository/Bronze_to_Silver.ipynb")
               silver_notebook = json.loads(silver_notebook_path.read_text(encoding="utf-8"))
