@@ -555,12 +555,25 @@ jobs:
               silver_parameters = bronze_to_silver.get("typeProperties", {}).get("baseParameters", {})
               expected_version_parameter = "@coalesce(activity('Read Table Details').output.firstRow.watermark_column,'')"
               expected_landing_status_parameter = "@activity('Landing to Bronze').output.runOutput"
+              expected_adf_run_id_parameter = "@pipeline().parameters.adf_run_id"
+              if silver_parameters.get("adf_run_id", {}).get("value") != expected_adf_run_id_parameter:
+                  errors.append("ADF must pass the parent run ID to correlate the Silver MERGE metrics with the exact Delta commit.")
               if silver_parameters.get("landing_status", {}).get("value") != expected_landing_status_parameter:
                   errors.append("ADF must pass the Landing-to-Bronze DATA/NO_DATA result explicitly to Bronze-to-Silver.")
               if silver_parameters.get("source_version_column", {}).get("value") != expected_version_parameter:
                   errors.append("ADF must pass table_config.watermark_column to the Silver MERGE source-version widget.")
               required_silver_contracts = {
                   "source-version widget": 'dbutils.widgets.text("source_version_column", "")',
+                  "ADF run identity widget": 'dbutils.widgets.text("adf_run_id", "")',
+                  "strict ADF run GUID validation": 're.fullmatch(r"[A-Fa-f0-9-]{36}", adf_run_id or "")',
+                  "Delta history API": "DeltaTable.forName(spark, target_table)",
+                  "commit metadata correlation": 'spark.databricks.delta.commitInfo.userMetadata',
+                  "commit marker includes run and batch": 'f"healthgrid|{adf_run_id}|{table_name}|{landing_timestamp}|SILVER_MERGE"',
+                  "MERGE inserted row metric": "numTargetRowsInserted",
+                  "MERGE updated row metric": "numTargetRowsUpdated",
+                  "strict single commit match": "if len(merge_history) != 1:",
+                  "actual written output": "records_written = inserted_rows + updated_rows",
+                  "output count returns actual write metric": 'dbutils.notebook.exit(str(records_written))',
                   "timestamp/date version validation": "TimestampType, DateType",
                   "null-key rejection": "null_key_condition",
                   "duplicate source-key rejection": "duplicate_source_keys",
@@ -593,6 +606,8 @@ jobs:
                   errors.append("Silver notebook must not default missing load_type metadata to FULL.")
               if "> target." not in silver_source:
                   errors.append("Silver MERGE must update matched rows only when the incoming source version is newer.")
+              if "record_count = updated_df.count()" in silver_source:
+                  errors.append("Silver notebook must not report all source rows as writes after MERGE skips.")
               if "target schema does not match" not in silver_source.lower():
                   errors.append("Silver MERGE must fail closed when source and target schemas differ.")
 
