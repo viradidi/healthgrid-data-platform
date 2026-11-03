@@ -6,7 +6,7 @@ This document records the main architectural and implementation decisions visibl
 
 HealthGrid is a completed end-to-end educational healthcare data platform built with synthetic data. It was originally developed as **CareSync** and later renamed **HealthGrid**. The original Azure environment was successfully executed; some cloud resources may subsequently have been decommissioned to avoid ongoing cost.
 
-The repository still contains legacy CareSync identifiers in Databricks catalog names, notebook paths, SQL comments, and ADF notification text. These are historical deployment references. The original architecture image is intentionally preserved unchanged.
+The repository's notebooks use the `healthgrid` Unity Catalog catalog, the `healthgrid.landing.landing_volume` landing Volume, and ADF notebook paths under `/Shared/HealthGrid/`. Azure endpoint and compute-specific values are deployment placeholders in the linked-service exports. The original architecture image is intentionally preserved unchanged.
 
 ## 2. Azure Data Factory for orchestration
 
