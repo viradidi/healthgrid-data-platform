@@ -15,9 +15,9 @@ This is a static review of the committed implementation and documentation. It is
 
 | Area | Assets | Purpose |
 |---|---|---|
-| PostgreSQL | Source DDL, UTC timestamp defaults, patient `updated_at` trigger/migration, and incremental-load SQL | Hospital, doctor, and patient source entities with reliable update timestamp maintenance |
+| PostgreSQL | Fresh source DDL, gated source reset, UTC timestamp defaults, patient `updated_at` trigger/migration, and incremental-load SQL | Hospital, doctor, and patient source entities; initialization refuses existing tables and reset requires explicit session authorization |
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
-| Control metadata | Control-table DDL, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records |
+| Control metadata | Fresh control-table DDL, gated control reset, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records; initialization and reset are separately guarded |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
 | ADF | Factory, pipelines, datasets, linked services | Orchestration, metadata lookup, audit, and notifications |
 | Databricks ingestion | Landing-to-Bronze notebook | Validates source/batch metadata, reserved columns and case-insensitive schema; blocks exact same-batch replay |
@@ -79,7 +79,8 @@ Gold notebooks use full rebuild/replace behavior. Validate target consistency an
 
 ### Legacy identifiers and destructive setup
 
-- Create the `healthgrid` Unity Catalog catalog and landing Volume, and import notebooks under `/Shared/HealthGrid/` before running ADF. Populate each linked-service placeholder with the target environment's endpoints and compute identifiers. Treat drop/reset SQL as disposable-environment setup, not as a production migration.
+- Source and control-table initialization are fresh-environment operations that refuse existing target objects. Separate reset scripts require explicit session authorization and are intended only for disposable DEV databases. The PostgreSQL reset drops only the three HealthGrid source tables; the Azure SQL reset deletes control metadata, watermarks, audit history, and CSV manifest state. Neither reset is a migration or a data rollback.
+- Create the `healthgrid` Unity Catalog catalog and landing Volume, and import notebooks under `/Shared/HealthGrid/` before running ADF. Populate each linked-service placeholder with the target environment's endpoints and compute identifiers.
 
 ### CI/CD
 
