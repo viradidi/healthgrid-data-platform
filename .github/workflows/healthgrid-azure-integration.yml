@@ -1,0 +1,151 @@
+name: HealthGrid Azure Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_run:
+        description: "I confirm this will execute the full HealthGrid master pipeline in the configured disposable DEV environment."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: healthgrid-azure-integration
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    if: ${{ inputs.confirm_run == true }}
+    name: Run ADF master pipeline and Databricks workloads
+    runs-on: ubuntu-latest
+    environment: healthgrid-integration
+    timeout-minutes: 190
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.HEALTHGRID_AZURE_RESOURCE_GROUP }}
+      AZURE_DATA_FACTORY_NAME: ${{ vars.HEALTHGRID_AZURE_DATA_FACTORY_NAME }}
+      ADF_PIPELINE_NAME: PL_MASTER
+
+    steps:
+      - name: Validate integration environment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$AZURE_RESOURCE_GROUP" ]] || { echo "::error::Set environment variable HEALTHGRID_AZURE_RESOURCE_GROUP."; exit 1; }
+          [[ -n "$AZURE_DATA_FACTORY_NAME" ]] || { echo "::error::Set environment variable HEALTHGRID_AZURE_DATA_FACTORY_NAME."; exit 1; }
+          echo "Target resource group: $AZURE_RESOURCE_GROUP"
+          echo "Target Data Factory: $AZURE_DATA_FACTORY_NAME"
+          echo "Pipeline: $ADF_PIPELINE_NAME"
+          echo "This workflow is intentionally manual and must target a disposable DEV environment."
+
+      - name: Authenticate to Azure with GitHub OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Execute and monitor HealthGrid end-to-end pipeline
+        shell: bash
+        run: |
+          set -euo pipefail
+          az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import time
+
+          resource_group = os.environ["AZURE_RESOURCE_GROUP"]
+          factory_name = os.environ["AZURE_DATA_FACTORY_NAME"]
+          pipeline_name = os.environ["ADF_PIPELINE_NAME"]
+
+          def az_json(arguments):
+              command = ["az", *arguments, "--only-show-errors", "--output", "json"]
+              result = subprocess.run(
+                  command,
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              )
+              return json.loads(result.stdout)
+
+          run = az_json([
+              "datafactory", "pipeline", "create-run",
+              "--resource-group", resource_group,
+              "--factory-name", factory_name,
+              "--name", pipeline_name,
+          ])
+          run_id = run.get("runId")
+          if not run_id:
+              raise RuntimeError("Azure Data Factory did not return a pipeline run ID.")
+
+          print(f"Started {pipeline_name}. ADF run ID: {run_id}")
+          print("The ADF master pipeline is responsible for invoking the Databricks workloads.")
+
+          deadline = time.monotonic() + (3 * 60 * 60)
+          terminal_success = {"Succeeded"}
+          terminal_failure = {"Failed", "Cancelled", "Canceled", "TimedOut"}
+
+          while time.monotonic() < deadline:
+              status_result = az_json([
+                  "datafactory", "pipeline-run", "show",
+                  "--resource-group", resource_group,
+                  "--factory-name", factory_name,
+                  "--run-id", run_id,
+              ])
+              status = status_result.get("status", "Unknown")
+              print(f"ADF run status: {status}")
+
+              if status in terminal_success:
+                  summary = (
+                      f"## HealthGrid Azure integration run\n\n"
+                      f"- **Factory:** {factory_name}\n"
+                      f"- **Pipeline:** {pipeline_name}\n"
+                      f"- **ADF run ID:** `{run_id}`\n"
+                      f"- **Result:** **Succeeded**\n\n"
+                      "This confirms the ADF master pipeline completed. Review activity runs, "
+                      "Databricks notebook outputs, audit rows, watermarks, and data reconciliation "
+                      "before treating the deployment validation plan as fully signed off.\n"
+                  )
+                  with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+                      handle.write(summary)
+                  sys.exit(0)
+
+              if status in terminal_failure:
+                  summary = (
+                      f"## HealthGrid Azure integration run\n\n"
+                      f"- **Factory:** {factory_name}\n"
+                      f"- **Pipeline:** {pipeline_name}\n"
+                      f"- **ADF run ID:** `{run_id}`\n"
+                      f"- **Result:** **{status}**\n\n"
+                      "Inspect the ADF pipeline and activity-run details in Azure before retrying.\n"
+                  )
+                  with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+                      handle.write(summary)
+                  sys.exit(f"ADF pipeline finished with status: {status}")
+
+              time.sleep(30)
+
+          # Stop the run created by this workflow if it exceeds the monitoring window.
+          subprocess.run(
+              [
+                  "az", "datafactory", "pipeline-run", "cancel",
+                  "--resource-group", resource_group,
+                  "--factory-name", factory_name,
+                  "--run-id", run_id,
+                  "--only-show-errors",
+              ],
+              check=False,
+              capture_output=True,
+              text=True,
+          )
+          raise TimeoutError(
+              f"ADF run {run_id} did not reach a terminal state within three hours; "
+              "a cancellation was requested."
+          )
+          PY
