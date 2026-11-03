@@ -293,8 +293,28 @@ jobs:
                       errors.append("Watermark lookback migration must add the field and initialize patient lookback to five minutes.")
 
               source_ddl_path = Path("01_Sources Data/01_postgres/create_source_tables.sql")
-              if "timezone('UTC', NOW())" not in source_ddl_path.read_text(encoding="utf-8"):
+              source_ddl = source_ddl_path.read_text(encoding="utf-8")
+              if "timezone('UTC', NOW())" not in source_ddl:
                   errors.append("PostgreSQL source DDL must define UTC timestamp defaults for source watermark fields.")
+              if "CREATE TRIGGER trg_patients_updated_at_utc" not in source_ddl or "clock_timestamp()" not in source_ddl:
+                  errors.append("PostgreSQL source DDL must install the UTC patients updated_at trigger.")
+
+              # Checkpoint advancement must remain downstream of successful Silver processing.
+              processed_activity = by_name.get("Mark File Manifest Processed", {})
+              processed_dependencies = processed_activity.get("dependsOn", [])
+              if not any(
+                  dep.get("activity") == "Bronze to Silver"
+                  and "Succeeded" in dep.get("dependencyConditions", [])
+                  for dep in processed_dependencies
+              ):
+                  errors.append("Checkpoint gate must only follow successful Bronze-to-Silver processing.")
+              watermark_dependencies = {
+                  dep.get("activity")
+                  for dep in watermark_gate.get("dependsOn", [])
+                  if "Succeeded" in dep.get("dependencyConditions", [])
+              }
+              if "Mark File Manifest Processed" not in watermark_dependencies:
+                  errors.append("Watermark advancement must depend on successful manifest finalization after Silver.")
 
               # Audit natural-key and idempotent retry contract across both table loops.
               main_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_MAIN.json")
