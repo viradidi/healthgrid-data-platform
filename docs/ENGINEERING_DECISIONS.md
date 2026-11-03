@@ -93,6 +93,8 @@ These are code-level safeguards, not a distributed exactly-once guarantee. APPEN
 
 ADF lists direct child items in the configured source folder, filters CSV files, reads each file's size, last-modified time, and content MD5 where available, then checks its manifest identity. The file moves through `IN_PROGRESS`, `COPIED`, and `PROCESSED`; a Copy failure is recorded as `FAILED`. The manifest is finalized as `PROCESSED` only after Bronze-to-Silver succeeds.
 
+**State-transition and retry safeguards:** Each per-file `COPIED` and `FAILED` update is scoped to the current ADF run and exact file-version identity, and asserts that exactly one manifest row transitioned. The updates accept their destination state as well as the expected prior state, making an ADF Script-activity retry idempotent after an acknowledgement loss. Finalization runs in a SQL transaction after Bronze-to-Silver succeeds; it transitions `COPIED` rows to `PROCESSED` and refuses to complete while any current-run row remains `IN_PROGRESS`, `COPIED`, or `FAILED`. A no-new-file/no-data run may legitimately have zero manifest rows. These checks strengthen SQL-side state consistency but do not make Delta writes and Azure SQL manifest updates one atomic distributed transaction.
+
 **Rationale:**
 - File modification time is a delivery property; `reported_at` is a business event timestamp inside the lab-results data. They are not interchangeable.
 - A file-level identity makes it possible to skip the same processed version on later runs.
