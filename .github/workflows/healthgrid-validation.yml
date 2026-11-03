@@ -400,7 +400,7 @@ jobs:
                   "20 new events with IDs 8,229–8,248",
                   "complete 25-provider snapshot",
                   "complete 30-provider snapshot",
-                  "the later file replaces the reference snapshot",
+                  "The later file replaces the reference snapshot",
               ):
                   if required not in fixture_contract:
                       errors.append(f"Source fixture contract documentation is missing a verified fixture rule: {required}")
