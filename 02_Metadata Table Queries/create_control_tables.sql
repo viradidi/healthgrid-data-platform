@@ -6,6 +6,19 @@
    and initial watermark rows for the incremental ones.
    ===================================================================== */
 
+/* Fresh initialization only. Never drops or overwrites existing control state.
+   Refuse to continue if any target table exists, including a partially created
+   schema from an earlier interrupted setup. Inspect and recover that state
+   explicitly; do not automatically run the destructive reset script. */
+IF OBJECT_ID('ctrl.table_config', 'U') IS NOT NULL
+   OR OBJECT_ID('ctrl.watermark', 'U') IS NOT NULL
+   OR OBJECT_ID('ctrl.audit_log', 'U') IS NOT NULL
+   OR OBJECT_ID('ctrl.file_ingestion_manifest', 'U') IS NOT NULL
+BEGIN
+    THROW 51040, 'HealthGrid control objects already exist. Fresh initialization stopped without changing existing objects or metadata.', 1;
+END;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'ctrl')
 BEGIN
     EXEC('CREATE SCHEMA ctrl');
