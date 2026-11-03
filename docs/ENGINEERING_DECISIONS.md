@@ -55,7 +55,7 @@ The ADF pipeline reads the stored watermark for non-FULL PostgreSQL loads and fi
 
 **Correctness assumptions and limitations:**
 - This timestamp watermark pattern applies to PostgreSQL sources in this project; ADLS CSV selection uses the per-file manifest.
-- The supplied PostgreSQL source DDL and incremental fixtures normalize the timestamp-without-time-zone values to UTC. External sources must follow the same UTC contract, update the watermark column on every relevant mutation, and avoid backdating updates outside the documented lookback.
+- The supplied PostgreSQL source DDL stores timestamp-without-time-zone values in UTC and installs a `BEFORE UPDATE` trigger on `patients` so every row update refreshes `updated_at`, even when a writer omits it. External sources must follow the same UTC/update-timestamp contract and avoid backdating updates outside the documented lookback.
 - The overlap is a mitigation, not a completeness guarantee. Updates arriving more than five minutes late, unmaintained timestamps, hard deletes, and some clock/transaction anomalies can still be missed.
 - The source query uses an inclusive lower bound and exclusive run-start upper bound. Re-reading boundary rows is expected; the MERGE's key/version checks provide idempotent handling for unchanged replays.
 - Checkpoint advancement is downstream of successful processing and records the fixed run-start upper bound, not pipeline completion time or the maximum source timestamp found in the batch.
