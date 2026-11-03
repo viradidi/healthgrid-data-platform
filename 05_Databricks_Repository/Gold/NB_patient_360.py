@@ -49,9 +49,6 @@
 
 # COMMAND ----------
 
-# DBTITLE 1,Return patient 360 record count
-updated_df # COMMAND ----------
-
 # DBTITLE 1,Validate patient 360 output contract
 from pyspark.sql import functions as F
 
