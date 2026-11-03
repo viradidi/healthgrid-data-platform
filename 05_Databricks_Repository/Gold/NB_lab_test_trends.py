@@ -7,6 +7,54 @@
 
 # COMMAND ----------
 
+# DBTITLE 1,Validate test trend event and calendar relationships
+from pyspark.sql import functions as F
+
+lab_source = spark.table("healthgrid.silver.lab_results")
+calendar_source = spark.table("healthgrid.silver.calendar")
+
+def assert_unique_non_null_key(dataframe, key, label):
+    if dataframe.filter(F.col(key).isNull()).limit(1).count():
+        raise ValueError(f"{label}.{key} contains NULL values.")
+    duplicates = (
+        dataframe.groupBy(key)
+        .count()
+        .filter(F.col("count") > 1)
+        .limit(1)
+        .count()
+    )
+    if duplicates:
+        raise ValueError(f"{label}.{key} is not unique; Gold join cardinality is unsafe.")
+
+assert_unique_non_null_key(lab_source, "lab_result_id", "lab_results")
+assert_unique_non_null_key(calendar_source, "date_key", "calendar")
+
+allowed_statuses = ["Normal", "Abnormal", "Critical"]
+invalid_lab_events = lab_source.filter(
+    F.col("test_name").isNull()
+    | F.col("test_date").isNull()
+    | F.col("result_status").isNull()
+    | (~F.col("result_status").isin(allowed_statuses))
+).limit(1).count()
+if invalid_lab_events:
+    raise ValueError("lab_results contains a NULL test/date/status or unsupported result_status.")
+
+month_starts = lab_source.select(
+    F.to_date(F.date_trunc("month", F.col("test_date"))).alias("month_start_date")
+).distinct()
+calendar_month_starts = calendar_source.select(
+    F.to_date("date").alias("month_start_date")
+).distinct()
+missing_calendar_months = (
+    month_starts.join(calendar_month_starts, on="month_start_date", how="left_anti")
+    .limit(1).count()
+)
+if missing_calendar_months:
+    raise ValueError("Silver calendar does not cover every month used by lab_test_trends.")
+
+# COMMAND ----------
+# COMMAND ----------
+
 # DBTITLE 1,Create lab test trends gold table
 # MAGIC %sql
 # MAGIC CREATE SCHEMA IF NOT EXISTS healthgrid.gold;
