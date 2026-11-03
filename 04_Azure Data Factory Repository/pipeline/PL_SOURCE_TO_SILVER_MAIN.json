@@ -3,9 +3,41 @@
   "properties": {
     "activities": [
       {
+        "name": "Validate Source System Parameter",
+        "type": "IfCondition",
+        "dependsOn": [],
+        "userProperties": [],
+        "typeProperties": {
+          "expression": {
+            "value": "@or(equals(pipeline().parameters.source_system,'neon_postgres'),equals(pipeline().parameters.source_system,'adls_csv'))",
+            "type": "Expression"
+          },
+          "ifTrueActivities": [],
+          "ifFalseActivities": [
+            {
+              "name": "Fail Unsupported Source System",
+              "type": "Fail",
+              "dependsOn": [],
+              "userProperties": [],
+              "typeProperties": {
+                "message": "source_system must be either neon_postgres or adls_csv.",
+                "errorCode": "INVALID_SOURCE_SYSTEM"
+              }
+            }
+          ]
+        }
+      },
+      {
         "name": "Read Source Tables List",
         "type": "Lookup",
-        "dependsOn": [],
+        "dependsOn": [
+          {
+            "activity": "Validate Source System Parameter",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
         "policy": {
           "timeout": "0.12:00:00",
           "retry": 2,
@@ -18,7 +50,7 @@
           "source": {
             "type": "AzureSqlSource",
             "sqlReaderQuery": {
-              "value": "select table_id from ctrl.table_config WHERE is_active=1 and source_system='@{pipeline().parameters.source_system}'",
+              "value": "SELECT table_id\nFROM ctrl.table_config\nWHERE is_active = 1\n  AND source_system = '@{replace(pipeline().parameters.source_system,'''','''''')}'",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
