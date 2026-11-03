@@ -68,6 +68,8 @@ The source-to-Silver framework uses `ctrl.table_config` to select active source 
 
 The PostgreSQL watermark approach is not a substitute for CDC: its correctness depends on source timestamps being maintained reliably and on the chosen watermark semantics being appropriate for the source. CSV selection is based on file metadata, not the `reported_at` business event-time column.
 
+For the PostgreSQL `patients` MERGE source, metadata configures a five-minute lookback. ADF captures a fixed UTC upper bound at run start and extracts the interval from the inclusive previous-checkpoint-minus-lookback boundary to that exclusive upper bound. The checkpoint advances to the captured run-start bound only after Bronze-to-Silver succeeds, and the update is monotonic so an older overlapping run cannot move it backwards. The overlap is replay-safe because Silver uses the version-aware `patient_id` MERGE.
+
 ## Medallion data layers
 
 ### Bronze — landed source batches
@@ -121,7 +123,7 @@ The control framework includes:
 |---|---|
 | [PostgreSQL source scripts](<01_Sources%20Data/01_postgres/>) | Source table creation, seed data, and sample incremental changes |
 | [ADLS CSV source data](<01_Sources%20Data/02_adls_csv/>) | Initial and incremental partner feed samples |
-| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, CSV file manifest, audit setup, and safe audit-key migration |
+| [Control metadata SQL](<02_Metadata%20Table%20Queries/>) | Configuration, PostgreSQL watermark, configurable lookback migration, CSV file manifest, audit setup, and safe audit-key migration |
 | [Gold STTM workbook](<03_Gold%20STTM/sttm_silver_to_gold.xlsx>) | Source-to-target mapping for analytical outputs |
 | [Azure Data Factory exports](<04_Azure%20Data%20Factory%20Repository/>) | Factory, linked services, datasets, and pipeline JSON |
 | [Databricks notebooks](<05_Databricks_Repository/>) | Landing, Bronze-to-Silver, calendar, and Gold transformations |
@@ -174,7 +176,7 @@ This is an educational demonstration built with synthetic data. It is not a clin
 ## Engineering scope and known considerations
 
 - Source-to-Silver ingestion is metadata-configured; ADLS CSV uses a per-file manifest, while PostgreSQL incremental extraction uses timestamp watermarks. Gold transformation SQL is defined in the individual notebooks.
-- Timestamp watermarks rely on source update semantics and should be assessed for late-arriving changes, deletes, and timestamp collisions.
+- Timestamp watermarks are not CDC: hard deletes are not captured, source updates older than the configured five-minute lookback can still be missed, and `updated_at` must be maintained reliably in UTC. Revalidate late-arrival, concurrency, and timestamp-boundary behavior in a restored Azure environment.
 - The MERGE strategy depends on correctly configured business keys and appropriate source deduplication.
 - The master pipeline gates Gold on successful source branches; its notification branch runs after Gold completes.
 - The source setup SQL is destructive and should be treated as an initialization/reset script.
