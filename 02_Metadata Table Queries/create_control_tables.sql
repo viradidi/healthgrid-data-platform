@@ -8,8 +8,12 @@
 
 /* Fresh initialization only. Never drops or overwrites existing control state.
    Refuse to continue if any target table exists, including a partially created
-   schema from an earlier interrupted setup. Inspect and recover that state
-   explicitly; do not automatically run the destructive reset script. */
+   schema from an earlier interrupted setup. The session gate is checked at
+   every GO-separated batch so execution tools that continue after an error
+   cannot proceed into later DDL or seed statements after a failed preflight.
+   Inspect and recover partial state explicitly; do not automatically reset it. */
+EXEC sys.sp_set_session_context @key = N'healthgrid_control_init_allowed', @value = 0;
+
 IF OBJECT_ID('ctrl.table_config', 'U') IS NOT NULL
    OR OBJECT_ID('ctrl.watermark', 'U') IS NOT NULL
    OR OBJECT_ID('ctrl.audit_log', 'U') IS NOT NULL
@@ -17,13 +21,23 @@ IF OBJECT_ID('ctrl.table_config', 'U') IS NOT NULL
 BEGIN
     THROW 51040, 'HealthGrid control objects already exist. Fresh initialization stopped without changing existing objects or metadata.', 1;
 END;
+
+EXEC sys.sp_set_session_context @key = N'healthgrid_control_init_allowed', @value = 1;
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
 IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = 'ctrl')
 BEGIN
     EXEC('CREATE SCHEMA ctrl');
 END
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
 /* ---------------------------------------------------------------------
    1. ctrl.table_config — one row per source table/file, drives every
@@ -53,6 +67,10 @@ CREATE TABLE ctrl.table_config (
 );
 GO
 
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
+
 /* ---------------------------------------------------------------------
    2. ctrl.watermark — last processed watermark value per table_id
    --------------------------------------------------------------------- */
@@ -63,6 +81,10 @@ CREATE TABLE ctrl.watermark (
     last_updated_timestamp DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
 /* ---------------------------------------------------------------------
    3. ctrl.audit_log — one row per table, per run, per stage
@@ -80,6 +102,10 @@ CREATE TABLE ctrl.audit_log (
     CONSTRAINT UQ_audit_log_run_table_stage UNIQUE (adf_run_id, table_id, stage)
 );
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
 /* ---------------------------------------------------------------------
    4. ctrl.file_ingestion_manifest — one source-file version per metadata
@@ -114,9 +140,17 @@ CREATE TABLE ctrl.file_ingestion_manifest (
 );
 GO
 
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
+
 CREATE INDEX IX_file_ingestion_manifest_status
     ON ctrl.file_ingestion_manifest (table_id, status, adf_run_id);
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
 /* =====================================================================
    Seed data — ctrl.table_config
@@ -153,6 +187,10 @@ VALUES
      'FULL', NULL, 0, NULL, 'SOURCE_TO_SILVER', 1);
 GO
 
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
+
 /* =====================================================================
    Seed data — ctrl.watermark
    Initial timestamp watermark for PostgreSQL incremental objects (patients).
@@ -165,6 +203,10 @@ FROM ctrl.table_config
 WHERE source_system = 'neon_postgres'
   AND load_type IN ('APPEND', 'MERGE');
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
 
 /* =====================================================================
@@ -193,5 +235,11 @@ VALUES
     ('silver', NULL, NULL, NULL, NULL,
      NULL, NULL, 'lab_test_trends',
      'FULL', NULL, NULL, 'SILVER_TO_GOLD', 1);
+
+EXEC sys.sp_set_session_context @key = N'healthgrid_control_init_allowed', @value = NULL;
 GO
+
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
+    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
+
 
