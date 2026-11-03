@@ -67,6 +67,29 @@ These cases use disposable synthetic databases. A test that only inspects SQL te
 | SQL-11 | Audit migration duplicate/index guard | Test duplicate natural keys and an incompatible existing index with the expected index name | Migration stops before changing history or accepting an incompatible index; valid definitions are created once and a valid rerun is a no-op |
 
 
+
+## 2C. PostgreSQL incremental fixtures and ADLS sample feed tests
+
+The exact fixture sequence and file semantics are defined in [SOURCE_FIXTURE_CONTRACT.md](SOURCE_FIXTURE_CONTRACT.md). These cases validate both the repository samples and their runtime use in disposable source environments.
+
+| ID | Scenario | Test procedure | Acceptance criteria |
+|---|---|---|---|
+| SRC-01 | PostgreSQL baseline fixture | Run `create_source_tables.sql` in an empty test database | 50 hospitals, 500 doctors, and 5,000 patients are created; generated attributes may vary because the source fixture uses random values |
+| SRC-02 | Incremental fixture round 1 | Run `run_incremental_load.sql` once after the baseline | Adds one hospital, two doctors, and three patients; updates the intended baseline entities; totals become 51, 502, and 5,003 |
+| SRC-03 | Incremental fixture round 2 | Run `run_incremental_load_round_2.sql` once after round 1 | Adds one hospital, two doctors, and three patients; updates the intended baseline entities; totals become 52, 504, and 5,006 |
+| SRC-04 | Incremental fixture replay | Re-run either already-committed round in a disposable database | Advisory lock and marker guard fail before any DML; row counts and previously updated values remain unchanged |
+| SRC-05 | Concurrent same-round fixture execution | Start two sessions executing the same round against the same test database | Transaction-scoped advisory lock serializes the attempts; one may commit and the other fails its marker guard without duplicate entities |
+| SRC-06 | Patient timestamp trigger | Apply the fixture updates and inspect patient rows | Every updated patient receives a fresh UTC `updated_at` value from the trigger, even when the SQL statement supplies a timestamp |
+| CSV-01 | Initial laboratory delivery | Parse and ingest `lab_results_2026_09_14_1329.csv` | 8,228 unique event rows with contiguous IDs 1–8,228; patient, hospital, and doctor references are within the seeded ranges |
+| CSV-02 | Incremental laboratory delivery | Parse and ingest `lab_results_2026_09_14_1440.csv` | 20 new event rows with unique contiguous IDs 8,229–8,248; no ID overlaps the initial delivery; APPEND adds exactly those rows |
+| CSV-03 | Initial insurance snapshot | Ingest the initial `insurance_providers.csv` as FULL | Silver contains the complete 25-row snapshot with unique IDs 1–25 |
+| CSV-04 | Later insurance snapshot | Ingest the later `insurance_providers.csv` as FULL after the initial snapshot | Silver is rebuilt to the complete 30-row snapshot with unique IDs 1–30; it contains 30 rows, not 55 |
+| CSV-05 | Cross-source identifier coverage | Compare lab and patient fixture references with source/provider IDs | Lab references remain within patient 1–5,000, hospital 1–50, and doctor 1–500; round-2 patient provider IDs 3, 8, 14, and 21 exist in the later provider snapshot |
+| CSV-06 | CSV business-time distinction | Compare `reported_at` values with file metadata and ADF selection | File selection uses the manifest/file version; `reported_at` remains a business event-time attribute and is not used as the ADLS selection watermark |
+
+The repository CI workflow validates CSV headers, record counts, ID uniqueness/ranges, date formats, provider contact placeholders, and incremental SQL replay guards. Those checks do not execute PostgreSQL or ADF; SRC-01 through SRC-06 and CSV-01 through CSV-06 still require disposable-environment runtime evidence.
+
+
 ## 3. Metadata framework tests
 
 | ID | Scenario | Test procedure | Acceptance criteria |
