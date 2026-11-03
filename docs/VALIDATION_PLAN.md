@@ -406,3 +406,11 @@ A test is PASS only when its acceptance criteria are supported by captured evide
 - **MET-03:** An existing Delta MERGE records `numTargetRowsInserted + numTargetRowsUpdated` from the uniquely tagged Delta commit.
 - **MET-04:** Stale or equal-version identical records are excluded from `records_written`; a no-op MERGE reports zero.
 - **MET-05:** Missing/multiple matching commits or missing operation metric keys fail the notebook rather than publishing an inferred count.
+
+## Gold materialization and audit tests
+
+- **GOLD-01 — Output row count:** Run each configured Gold notebook and reconcile its ADF output value and `ctrl.audit_log.records_written` to the resulting Gold table row count.
+- **GOLD-02 — Output contract:** Confirm schema, key uniqueness, grain, and metric assertions complete before the notebook returns a count.
+- **GOLD-03 — Failure path:** Force a Gold notebook failure; verify the table-stage audit is marked FAILED and the pipeline Fail activity runs only after that failure-audit update succeeds. On a successful notebook path, the failure terminator must be skipped.
+- **GOLD-04 — Metadata selection:** Confirm only active `SILVER_TO_GOLD` metadata rows are processed and each `gold_table_name` resolves to its matching notebook.
+- **GOLD-05 — Full rebuild semantics:** Record that each Gold run replaces the full output table; its audit count describes output cardinality, not only rows changed since the prior run.
