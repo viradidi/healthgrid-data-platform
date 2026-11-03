@@ -382,3 +382,10 @@ Document excluded, rejected, duplicated, or late-arriving records. Every differe
 Record release/deployment identifier, workspace/environment, test date, ADF run IDs, test IDs passed/failed/blocked, known exceptions, reconciliation evidence, checkpoint values, reviewer, and approval decision.
 
 A test is PASS only when its acceptance criteria are supported by captured evidence. A test case, static code review, or historical successful execution does not prove that a new deployment or code change has passed that test.
+
+### Landing-to-Bronze file discovery
+
+- **LB-01:** Hidden files and Spark marker files are ignored during batch discovery.
+- **LB-02:** CSV metadata accepts only `.csv` files; Parquet metadata accepts only `.parquet` files.
+- **LB-03:** A visible file with an unexpected extension fails before Spark reads or writes Bronze.
+- **LB-04:** An empty batch follows the configured NO_DATA contract, while missing volume/access errors fail the run.
