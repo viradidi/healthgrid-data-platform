@@ -104,6 +104,8 @@ When a notification fails:
 
 The Web Activity has no automatic retry while receiver-side idempotency is unverified. A successful HTTP acknowledgement is not by itself proof of mailbox delivery; confirm the Logic Apps email action and the intended recipient's delivery. Preserve the original parent run ID during notification diagnosis. See [Notification Payload Contract](NOTIFICATION_CONTRACT.md) for the exact fields and known compatibility boundary.
 
+The [Source Fixture Contract](SOURCE_FIXTURE_CONTRACT.md) records the one-time PostgreSQL fixture sequence, its expected source row counts, the lab-results append IDs, and the full insurance-provider snapshot semantics. Use it when recreating the demonstration data; do not replay the PostgreSQL fixture SQL after a successful commit.
+
 ## 5. Load strategies and watermark handling
 
 ### FULL
