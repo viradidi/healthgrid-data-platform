@@ -153,7 +153,9 @@ The control framework records table-level stage status, ADF run ID, record count
 
 The notification payload includes the parent PostgreSQL, ADLS CSV, and Gold-gate outcomes as well as table-level audit rows. Its subject is FAILED if any parent branch did not succeed or the audit table contains a non-SUCCESS row. This covers failures that occur before a table-level audit row can be created, such as a failed metadata lookup.
 
-**Operational consideration:** The master pipeline requires both source branches to be Succeeded before starting Gold. The notification branch uses Completed after Gold so it can run after either Gold success or failure. Validate this failure-propagation and notification behavior in the deployed factory; a completed notification activity alone does not prove that upstream processing succeeded.
+**Notification contract and delivery boundary:** `PL_SEND_EMAIL` posts a JSON object containing the parent `adf_run_id`, subject, legacy `email_receipients` field, human-readable header/footer, a `pipeline_statuses` object, and ordered `status_table` audit rows. The status table is allowed to be empty when failure occurs before table-level audit initialization; parent branch statuses determine the master outcome. The recipient key spelling is retained for compatibility because the Logic Apps consumer definition is not checked into this repository. The request schema and deployment checklist are documented in [NOTIFICATION_CONTRACT.md](NOTIFICATION_CONTRACT.md).
+
+**Delivery trade-offs:** The Web Activity has a two-minute HTTP response timeout and no automatic retries. Retrying an ambiguously acknowledged POST could send duplicate notifications because no receiver-side `adf_run_id` deduplication implementation is present in the repository. There is no durable notification outbox or delivery audit table. A successful endpoint acknowledgement does not independently prove that the email reached a mailbox; validate the deployed Logic Apps run and email action.
 
 ## 12. Audit record identity and retry semantics
 
