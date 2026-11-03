@@ -6,7 +6,7 @@ This is a static review of the committed implementation and documentation. It is
 
 - Project: HealthGrid; original name: CareSync.
 - The project owner confirms the original implementation ran successfully end-to-end. Some Azure resources were later decommissioned to control cost.
-- Remaining CareSync identifiers are legacy deployment names and must be aligned consistently when provisioning a new environment.
+- The repository's ADF and Databricks artifacts use HealthGrid naming conventions. Environment-specific endpoints and compute identifiers are represented by placeholders in linked services and must be populated during deployment.
 - The original architecture image at assets/architecture-overview.png is protected and must remain unchanged.
 
 ## Implementation inventory
@@ -72,7 +72,7 @@ Gold notebooks use full rebuild/replace behavior. Validate target consistency an
 
 ### Legacy identifiers and destructive setup
 
-Map CareSync catalog, Volume, workspace, and notebook path references to one target naming convention during redeployment. Do not use blind global replacements. Treat drop/reset SQL as disposable-environment setup, not as a production migration.
+- Create the `healthgrid` Unity Catalog catalog and landing Volume, and import notebooks under `/Shared/HealthGrid/` before running ADF. Populate each linked-service placeholder with the target environment's endpoints and compute identifiers. Treat drop/reset SQL as disposable-environment setup, not as a production migration.
 
 ### CI/CD
 
