@@ -76,6 +76,15 @@ The Bronze-to-Silver notebook filters by the same landing timestamp so the curre
 
 **Trade-off:** The landing timestamp gives the processing pipeline a batch boundary, and exact same-timestamp batches are blocked before another Bronze append. The CSV manifest additionally skips already-processed file versions and blocks unresolved prior-run copies. It is not a distributed exactly-once transaction; whole-file replacement under APPEND can still duplicate rows.
 
+**Silver write contract:** The shared Bronze-to-Silver notebook treats the configured load strategy as required metadata and rejects missing/unknown values instead of assuming FULL. FULL replaces the target from the current non-empty batch; APPEND adds the batch but does not deduplicate business events across distinct batch IDs; MERGE uses configured business keys and a DATE/TIMESTAMP source version.
+
+**MERGE safeguards:** Source business keys are checked for nulls and duplicates, and source versions for nulls. If a target exists, the notebook requires matching column names and data types, rejects case-insensitive name collisions, and checks target key uniqueness and version nullability. A strictly newer source version updates the target; an older version is skipped; an identical equal-version business payload is a no-op; and an equal-version payload conflict fails for reconciliation. Technical landing/insert/update timestamps are excluded from equal-version payload comparison.
+
+**Failure behavior:** The notebook accepts the explicit ADF DATA/NO_DATA status. NO_DATA exits without a Silver write; if ADF reports DATA but the timestamped Bronze batch is empty, the notebook fails so downstream checkpoint logic cannot mistake a missing batch for a successful data load. Table and landing-batch identifiers are restricted to safe formats before use in Spark statements.
+
+These are code-level safeguards, not a distributed exactly-once guarantee. APPEND remains sensitive to a source re-delivering the same business events under a different landing timestamp. Repository CI statically checks the contracts and parses notebook Python code; Delta runtime behavior requires validation in a restored Databricks workspace.
+
+
 ## 7. Per-file manifest for ADLS CSV feeds
 
 **Decision:** Track file versions in `ctrl.file_ingestion_manifest` instead of using a timestamp watermark for CSV selection.
