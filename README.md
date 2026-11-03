@@ -111,25 +111,29 @@ A calendar dimension is also prepared in Silver to support date-based reporting.
 
 ### Gold — analytical datasets
 
-Three Gold notebooks create curated datasets from the Silver layer:
+Three Gold notebooks create curated datasets from the Silver layer. The target tables are rebuilt with CREATE OR REPLACE TABLE; they are full refreshes, not incremental Gold merges.
 
-| Gold dataset | Analytical purpose |
-|---|---|
-| `patient_360` | Patient-level view enriched with hospital, insurance provider, and aggregated laboratory activity |
-| `hospital_daily_summary` | Daily hospital laboratory volumes, unique patients, doctor counts, abnormal and critical results, and trend measures |
-| `lab_test_trends` | Monthly laboratory test volumes, abnormal and critical counts, rates, and month-over-month changes |
+| Gold dataset | Grain | Transformations and metric definitions |
+|---|---|---|
+| [patient_360](<05_Databricks_Repository/Gold/NB_patient_360.py>) | One row per patient_id | Preserves patient records with left joins to hospital and provider references; aggregates lab events per patient before joining; exposes total, abnormal and critical test counts plus last test date. Age is calculated at rebuild time using an approximate 365.25-day year. |
+| [hospital_daily_summary](<05_Databricks_Repository/Gold/NB_hospital_daily_summary.py>) | One row per hospital_id, summary_date | Aggregates test volume, distinct patients and doctors represented in test activity, result-status counts and rates; adds calendar attributes and a comparison with the previous available date row for that hospital. |
+| [lab_test_trends](<05_Databricks_Repository/Gold/NB_lab_test_trends.py>) | One row per test_name, year, month | Aggregates monthly test volume, abnormal and critical counts and rates; calculates the change in abnormal rate versus the previous available month for that test. |
+
+**Metric interpretation matters:** hospital daily and lab monthly LAG calculations compare with the previous available observation, not a generated zero-activity calendar day/month. test_volume_change_pct is relative percentage change; abnormal_rate_change_pct is a percentage-point difference between two rates. The hospital active_doctor_count counts distinct doctors represented in test events, not the full doctor roster.
+
+Each Gold notebook now checks required output columns, non-null and unique grain keys, and count/rate bounds before returning its row count. These are notebook runtime checks; they have not been executed against a restored Azure/Databricks environment after the environment was decommissioned. The repository CI workflow checks source syntax and static contracts, not Spark query results.
 
 These models illustrate the kinds of operational questions a data team could support:
 
 | Operational question | Gold output | Analytical purpose |
 |---|---|---|
-| What is the consolidated administrative and laboratory-activity view for a synthetic patient record? | `patient_360` | Combines registration, facility, insurer-reference, and pre-aggregated laboratory activity at patient grain |
-| How does laboratory activity vary across facilities and days? | `hospital_daily_summary` | Compares test volumes, unique patients, active doctors represented in test activity, and result-status mix |
-| Which test categories are increasing or changing in outcome mix over time? | `lab_test_trends` | Tracks monthly test volumes and the distribution of synthetic result-status categories |
+| What is the consolidated administrative and laboratory-activity view for a synthetic patient record? | patient_360 | Combines registration, facility, insurer-reference, and pre-aggregated laboratory activity at patient grain |
+| How does laboratory activity vary across facilities and days? | hospital_daily_summary | Compares test volumes, unique patients, doctors represented in test activity, and result-status mix |
+| Which test categories are increasing or changing in outcome mix over time? | lab_test_trends | Tracks monthly test volumes and the distribution of synthetic result-status categories |
 
-The `Abnormal` and `Critical` labels are supplied by the synthetic source fixtures. They are treated as reporting categories only; the platform does not calculate clinical thresholds, diagnose conditions, or recommend treatment.
+The Abnormal and Critical labels are supplied by the synthetic source fixtures. They are treated as reporting categories only; the platform does not calculate clinical thresholds, diagnose conditions, or recommend treatment.
 
-**All layers are metadata-driven.** Active metadata configures source-to-Silver processing and selects the Gold outputs to execute. The Gold pipeline reads active `SILVER_TO_GOLD` records from `ctrl.table_config` and resolves each Databricks notebook path from `gold_table_name`. Dataset-specific analytical transformation logic remains implemented in the corresponding notebooks.
+**All layers are metadata-driven.** Active metadata configures source-to-Silver processing and selects the Gold outputs to execute. The Gold pipeline reads active SILVER_TO_GOLD records from ctrl.table_config and resolves each Databricks notebook path from gold_table_name. Dataset-specific analytical transformation logic remains implemented in the corresponding notebooks.
 
 ## Orchestration and operational controls
 
