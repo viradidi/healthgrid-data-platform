@@ -201,3 +201,7 @@ The SOURCE_TO_SILVER audit count represents logical rows written to Silver. FULL
 ## Decision — define Gold audit counts as materialized output cardinality
 
 The three Gold models are full rebuilds using `CREATE OR REPLACE TABLE`. Each notebook validates the resulting table's schema, grain, and metric constraints, then returns its final row count. The `SILVER_TO_GOLD` audit stores that count as the number of output rows in the rebuilt dataset. It is not a net insert/update count compared with the previous Gold version. A Gold notebook failure must mark the stage audit FAILED; the explicit pipeline Fail activity is gated on successful completion of that failure-audit update, so the success path does not invoke the failure terminator.
+
+## Decision — validate Gold input grain before publishing rebuilt outputs
+
+The laboratory source uses APPEND, and the Silver ingestion contract does not globally deduplicate the same business event if it arrives in a different source batch. The three Gold notebooks now reject duplicate or NULL `lab_result_id` values before their full-table rebuilds. They also preflight the dimension/calendar key uniqueness and the references used by each model's joins, plus the modeled event status/date requirements. This avoids silently multiplying rows through non-unique dimensions or inflating counts from repeated events. The guard does not repair or deduplicate Silver; a failed preflight requires data reconciliation before the Gold rebuild is retried.
