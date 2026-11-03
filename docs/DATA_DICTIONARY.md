@@ -215,9 +215,23 @@ The Bronze layer preserves source-oriented data for downstream processing and tr
 
 **Purpose:** Provide standardized, queryable Delta tables for analytical transformation.
 
-The shared Bronze-to-Silver notebook receives the configured target table, batch timestamp, load type, merge keys, and `watermark_column` as its source-version field. It applies the configured FULL, APPEND, or MERGE strategy.
+The shared Bronze-to-Silver notebook receives the target table, landing timestamp, load type, merge keys, and metadata `watermark_column` as the MERGE source-version field. It reads only the Bronze batch identified by that landing timestamp.
 
-For MERGE, the notebook rejects null or duplicate source business keys and null source versions before writing. Existing target keys and schema are validated. A matched row is updated only when the incoming DATE/TIMESTAMP version is newer; an older source version is skipped, an identical equal-version replay is a no-op, and an equal-version business-payload conflict fails for reconciliation.
+**Write strategies**
+- **FULL:** overwrite the Silver target with the current complete batch. Missing or invalid load metadata fails closed; the notebook does not silently assume FULL. The Landing-to-Bronze step rejects empty FULL extracts before the Silver overwrite.
+- **APPEND:** append the current batch. This strategy does not deduplicate business records across different landing timestamps. The CSV manifest protects an exact processed file version from automatic recopy, but changed whole-file snapshots or new batches containing previously ingested events can still duplicate rows.
+- **MERGE:** insert unseen business keys and update a matched row only when the incoming source version is strictly newer than the target version.
+
+**MERGE validation and ordering contract**
+- Metadata must supply one or more merge keys and a source-version column. The version column must resolve to exactly one source column and have DATE or TIMESTAMP type.
+- Source keys must be non-null and unique within the batch; source versions must be non-null. The notebook rejects duplicate keys rather than selecting an arbitrary winner.
+- When the target exists, column names and data types must match the incoming source schema. Case-insensitive column-name collisions are rejected. Target keys must be non-null and unique, and target source-version values must be non-null.
+- A strictly newer source version updates the matched row; an older source version is skipped. An equal-version row with identical business payload is a no-op, while an equal-version row with changed business payload is rejected. Landing/insert/update timestamps are treated as technical metadata, not business payload, for this equality check.
+- A missing target is initialized from the validated source batch.
+
+The notebook accepts explicit DATA/NO_DATA landing status. NO_DATA exits without a Silver write; a DATA hand-off with no matching Bronze rows fails rather than reporting a successful empty load. Table names and landing-batch identifiers are validated before they are interpolated into Spark identifiers or batch filters.
+
+The final notebook count is the number of source Bronze rows processed for the batch; for MERGE, it is not a count of inserted or updated target rows. All Databricks behavior still requires runtime validation; passing repository CI verifies static code and contract checks, not Delta execution.
 
 The Silver layer includes the source entities and the reusable calendar dimension.
 
