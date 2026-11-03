@@ -649,6 +649,13 @@ jobs:
                   (a for a in by_name.get("Check load type", {}).get("typeProperties", {}).get("ifTrueActivities", []) if a.get("name") == "Validate Watermark"),
                   {}
               )
+              store_watermark = next(
+                  (a for a in by_name.get("Check load type", {}).get("typeProperties", {}).get("ifTrueActivities", []) if a.get("name") == "Store watermark value"),
+                  {}
+              )
+              stored_watermark_expression = store_watermark.get("typeProperties", {}).get("value", {}).get("value", "")
+              if "@string(coalesce(activity('Read watermark').output.firstRow.watermark_value,''))" not in stored_watermark_expression:
+                  errors.append("Watermark variable assignment must safely coalesce missing values before the explicit validity gate.")
               validate_watermark_expression = validate_watermark.get("typeProperties", {}).get("expression", {}).get("value", "")
               if "watermark_is_valid" not in validate_watermark_expression or not any(a.get("type") == "Fail" for a in validate_watermark.get("typeProperties", {}).get("ifFalseActivities", [])):
                   errors.append("Missing/null/malformed incremental watermarks must fail before source extraction.")
