@@ -21,6 +21,8 @@ BEGIN
 END;
 $healthgrid_reset_guard$;
 
+RESET healthgrid.allow_destructive_reset;
+
 BEGIN;
 
 DROP TABLE IF EXISTS public.patients;
