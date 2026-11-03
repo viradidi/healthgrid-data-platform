@@ -1,5 +1,5 @@
 /* =====================================================================
-   CareSync Health Network — Internal Hospital System Tables
+   HealthGrid — Synthetic Hospital Operations Source Tables
    Target: Neon Postgres (source system, schema: public)
    Creates hospitals, doctors, patients + seed sample data.
    ===================================================================== */
