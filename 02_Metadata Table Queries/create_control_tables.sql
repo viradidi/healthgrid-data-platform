@@ -237,9 +237,3 @@ VALUES
      'FULL', NULL, NULL, 'SILVER_TO_GOLD', 1);
 
 EXEC sys.sp_set_session_context @key = N'healthgrid_control_init_allowed', @value = NULL;
-GO
-
-IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_control_init_allowed')), 0) <> 1
-    THROW 51042, 'HealthGrid control initialization is blocked because the initial safety preflight did not pass.', 1;
-
-
