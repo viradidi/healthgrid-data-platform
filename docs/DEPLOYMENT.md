@@ -213,18 +213,51 @@ The PostgreSQL patients load now uses a fixed UTC upper bound captured at the st
 | Audit | Verify one unique row per parent run/table/stage, idempotent start upserts, and stage-scoped status updates |
 | Deployment placeholders | Confirm all linked-service endpoints, workspace URL, cluster ID, database, and username are populated for the target environment |
 
-## 8. Rollback and recovery
+## 8. Release rollback and data recovery
 
-- Pause schedules before repairing a failed deployment.
-- Preserve ADF run history, notebook output, audit rows, and checkpoint values. Audit rows summarize the latest attempt for each parent run/table/stage; use ADF run/activity history for retry-level detail.
-- Identify the last verified source interval and successful Silver state.
-- Do not advance a watermark to make a failed run appear complete.
-- For CSV feeds, reconcile the file manifest and original landing path before replay; do not automatically recopy unresolved COPIED/IN_PROGRESS versions.
-- For other APPEND, check whether the batch has already been written before replaying.
-- For MERGE, confirm source ordering and target state before replaying.
-- For FULL, confirm a complete source snapshot before overwriting.
-- For Gold, inspect the target after a failed CREATE OR REPLACE operation and rebuild only after confirming input completeness.
-- Re-run relevant validation cases and retain evidence.
+Rollback is not one transaction. Restoring an earlier Git commit or ADF definition does **not** undo writes already made to Delta tables, reverse Azure SQL migrations, or restore watermark and file-manifest state. Treat code rollback, data recovery, and control-state repair as separate operations.
+
+### 8.1 Capture a pre-change recovery baseline
+
+Before publishing ADF changes, importing notebooks, changing metadata, or running a destructive FULL load:
+
+1. Record the repository commit SHA, release/change identifier, target environment, and the currently published ADF version. Preserve the deployed factory/pipeline export without secrets; the collaboration-branch commit alone does not prove what is currently published.
+2. Pause scheduled triggers and confirm no overlapping parent run is active for the affected tables.
+3. Export the active `ctrl.table_config` rows and capture all relevant `ctrl.watermark` values, unresolved manifest rows (`IN_PROGRESS`, `COPIED`, or `FAILED`), recent audit records, and ADF parent/activity run IDs.
+4. Capture the current Bronze/Silver/Gold table names, schemas, row counts, and Delta table versions/history where available. Preserve the source snapshot or exact CSV file versions needed to reproduce the affected batch.
+5. Verify the Azure SQL recovery/backup configuration and retention window, and verify whether the required Delta table versions are still retained. A Git export or notebook copy is not a data backup.
+6. For a control-schema migration, take and verify the database recovery point before applying it. The audit unique-key migration already documents this prerequisite; apply the same discipline to other control changes.
+
+Do not start a release if the recovery method for a table that may be overwritten or appended is unknown.
+
+### 8.2 Choose the rollback method by change type
+
+| Changed area | Preferred rollback/recovery | Important boundary |
+|---|---|---|
+| ADF factory/pipeline definitions | Restore the last known-good definitions from a recorded commit/export and publish them through the same ADF publishing process. Verify the deployed factory after publishing. | Reverting Git alone does not change the live published factory. The manual Azure integration workflow starts `PL_MASTER`; it is not a deployment or rollback workflow. |
+| Databricks notebooks | Restore the notebook files from the known-good commit and re-import/redeploy them to the exact workspace paths referenced by ADF. Verify the deployed notebook contents/version before restarting triggers. | Restoring notebook code does not reverse any table writes made by the failed release. |
+| Azure SQL control schema | Prefer a forward corrective migration for an additive schema change. If database recovery is required, restore to a separate database using the configured point-in-time/backup capability, validate metadata and state, then deliberately reconnect the environment. | There are no automatic down migrations. Restoring the control database also rewinds metadata, watermarks, audit rows, and manifest states; those must be reconciled with the actual lake contents before cutover. |
+| Bronze/Silver FULL | Rebuild from a verified complete source snapshot or restore a retained Delta table version when its history/files are still available and the restore is validated. | FULL replaces the current target. Do not assume the prior table contents can be reconstructed from the new target alone. |
+| Silver APPEND | Identify the exact landing batch and determine whether it was written before replay. Remove or restore data only with a reviewed, batch-scoped recovery procedure. | Blind replay can duplicate business rows; the file manifest is not a distributed transaction with Delta. |
+| Silver MERGE | Reprocess only after confirming business keys, source versions, and payloads; otherwise restore/rebuild the affected table from a verified state. | Version-aware MERGE makes matching replays safer, but it does not correct an incorrect transformation or recover hard deletes automatically. |
+| Gold CREATE OR REPLACE | After restoring the intended notebook version, rebuild from verified Silver inputs; use a retained Delta version only when it is still available and validated. | Gold outputs are full rebuilds. Re-running a failed notebook without checking the Silver inputs and published code is not a rollback. |
+| Watermarks and CSV manifest | Reconcile the checkpoint and each file state against the actual landing, Bronze, and Silver results; update control state only after the data outcome is established. | Never advance a watermark to hide a failure, reset a checkpoint blindly, or mark a file PROCESSED merely to clear a blocked run. |
+
+Delta time travel/restore is conditional on the required table history and underlying data files still being retained. Confirm retention and test the restore path in the target environment; do not treat a table version number alone as a guaranteed recovery point.
+
+### 8.3 Controlled recovery sequence
+
+1. Stop new schedules and manual dispatches for the affected pipeline; wait for or cancel active runs deliberately and preserve their run IDs and outputs.
+2. Record the failed release commit, deployed ADF version, affected notebook paths, activity error, data batches, audit rows, watermarks, manifest entries, and target table versions.
+3. Classify the incident as code/configuration, source/landing, Bronze/Silver data, Gold publication, or control-state failure. Identify whether a write completed before the reported failure.
+4. Restore the last known-good ADF and/or notebook definitions when code is implicated. Publish/re-import them and verify the actual deployed artifacts; do not assume a Git revert is sufficient.
+5. Recover or rebuild affected data using the method in the table above. Preserve unresolved landing files and manifest evidence until each copied batch has been reconciled.
+6. Reconcile control state with the resulting data. A checkpoint may only represent a successfully processed source interval; manifest status may only represent the verified outcome of that file version. Never restore only the control database or only the lake and assume they are consistent.
+7. Run the relevant recovery tests in `docs/VALIDATION_PLAN.md`, then reconcile source, landing, Bronze, Silver, Gold, audit, watermark, and manifest outcomes.
+8. Re-enable schedules only after the recovery owner records the evidence and approves the release/recovery gate.
+
+A failed activity may occur after an earlier write succeeded. Use activity outputs and actual target state to determine the recovery point; the parent pipeline result alone is not enough to decide whether replay is safe.
+
 
 ## 9. Cost-conscious operation and cleanup
 
