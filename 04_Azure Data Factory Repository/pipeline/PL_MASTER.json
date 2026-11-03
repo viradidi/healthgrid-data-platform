@@ -49,38 +49,53 @@
         }
       },
       {
-        "name": "Silver to Gold",
-        "type": "ExecutePipeline",
+        "name": "Run Gold only when both sources succeed",
+        "type": "IfCondition",
         "dependsOn": [
           {
             "activity": "Source to Silver Postgres",
             "dependencyConditions": [
-              "Succeeded"
+              "Completed"
             ]
           },
           {
             "activity": "Source to Silver ADLS csv",
             "dependencyConditions": [
-              "Succeeded"
+              "Completed"
             ]
           }
         ],
-        "policy": {
-          "secureInput": false
-        },
         "userProperties": [],
         "typeProperties": {
-          "pipeline": {
-            "referenceName": "PL_SILVER_TO_GOLD",
-            "type": "PipelineReference"
+          "expression": {
+            "value": "@and(equals(activity('Source to Silver Postgres').Status,'Succeeded'),equals(activity('Source to Silver ADLS csv').Status,'Succeeded'))",
+            "type": "Expression"
           },
-          "waitOnCompletion": true,
-          "parameters": {
-            "adf_run_id": {
-              "value": "@pipeline().RunId",
-              "type": "Expression"
+          "ifTrueActivities": [
+            {
+              "name": "Execute Silver to Gold",
+              "type": "ExecutePipeline",
+              "dependsOn": [],
+              "policy": {
+                "secureInput": false
+              },
+              "userProperties": [],
+              "typeProperties": {
+                "pipeline": {
+                  "referenceName": "PL_SILVER_TO_GOLD",
+                  "type": "PipelineReference"
+                },
+                "waitOnCompletion": true,
+                "parameters": {
+                  "adf_run_id": {
+                    "value": "@pipeline().RunId",
+                    "type": "Expression"
+                  }
+                }
+              }
             }
-          }
+          ],
+          "ifFalseActivities": []
         }
       },
       {
@@ -88,7 +103,7 @@
         "type": "ExecutePipeline",
         "dependsOn": [
           {
-            "activity": "Silver to Gold",
+            "activity": "Run Gold only when both sources succeed",
             "dependencyConditions": [
               "Completed"
             ]
@@ -107,6 +122,18 @@
           "parameters": {
             "adf_run_id": {
               "value": "@pipeline().RunId",
+              "type": "Expression"
+            },
+            "postgres_status": {
+              "value": "@activity('Source to Silver Postgres').Status",
+              "type": "Expression"
+            },
+            "adls_status": {
+              "value": "@activity('Source to Silver ADLS csv').Status",
+              "type": "Expression"
+            },
+            "gold_status": {
+              "value": "@if(and(equals(activity('Source to Silver Postgres').Status,'Succeeded'),equals(activity('Source to Silver ADLS csv').Status,'Succeeded')),activity('Run Gold only when both sources succeed').Status,'SKIPPED_SOURCE_FAILURE')",
               "type": "Expression"
             }
           }
