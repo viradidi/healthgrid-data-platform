@@ -193,3 +193,7 @@ Credentials should be supplied through secure linked-service configuration and A
 5. What is the grain of each Gold dataset, and how do the joins preserve it?
 6. How would you validate that an ADF master run cannot publish Gold outputs from failed source branches?
 7. What evidence would you collect to demonstrate a successful end-to-end run?
+
+## Decision — audit logical Silver writes, not MERGE input volume
+
+The SOURCE_TO_SILVER audit count represents logical rows written to Silver. FULL/APPEND and initial MERGE table creation use the successfully written input row count. Existing Delta MERGE operations use the operation metrics from the exact tagged commit: inserted plus updated target rows. Source rows skipped because they are stale or equal-version identical do not count as writes. The commit marker is tied to the parent ADF run, target table, and landing batch. This intentionally fails closed when Delta history cannot establish a unique commit and its required metrics; it does not silently substitute the number of Bronze input rows. Runtime validation must confirm these metrics in the restored Azure Databricks workspace.
