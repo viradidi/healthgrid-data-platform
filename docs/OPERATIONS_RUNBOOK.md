@@ -10,8 +10,10 @@ The ADF master pipeline, `PL_MASTER`, coordinates:
 
 1. PostgreSQL source-to-Silver ingestion.
 2. ADLS CSV source-to-Silver ingestion.
-3. Metadata-driven Silver-to-Gold execution.
-4. Email notification.
+3. A status gate that waits for both source branches to complete and starts metadata-driven Silver-to-Gold only when both source branches succeeded.
+4. Email notification after the Gold decision completes. The notification runs whether Gold succeeded, failed, or was skipped because a source branch failed.
+
+The email receives the PostgreSQL, ADLS CSV, and Gold-gate statuses in addition to the table-level audit rows. Its subject reports `FAILED` if any branch did not succeed or if any table-level audit row remains non-`SUCCESS`, including failures that occurred before a table-level audit row could be created.
 
 The source branches use `PL_SOURCE_TO_SILVER_MAIN` and the parameterized `PL_SOURCE_TO_SILVER_INNER`. The inner pipeline reads the selected `ctrl.table_config` row, retrieves a timestamp watermark for non-FULL PostgreSQL loads or consults the per-file manifest for ADLS CSV, then copies data to a timestamped landing folder, and invokes the shared Landing-to-Bronze and Bronze-to-Silver notebooks. PostgreSQL extraction now resolves both schema and table names from metadata. The ADLS CSV branch enumerates files, checks `ctrl.file_ingestion_manifest`, and copies unprocessed file versions individually. Landing folder names use a 24-hour timestamp with milliseconds and the ADF run ID to reduce collisions. Landing-to-Bronze now returns an explicit `DATA` or `NO_DATA` result. An unexpected empty FULL batch fails before Silver can overwrite its target; a FULL CSV feed with files already marked PROCESSED is a successful no-op. Empty incremental batches skip Silver writes and checkpoint advancement, then record a successful zero-row outcome.
 
@@ -68,11 +70,11 @@ ORDER BY updated_timestamp DESC;
 3. Inspect each child pipeline and table-level ForEach iteration.
 4. Confirm Copy activities and Databricks notebooks succeeded.
 5. Review audit records for every expected source object.
-6. Verify Silver outputs before accepting the Gold stage.
+6. Confirm the Gold gate outcome and verify Silver outputs before accepting Gold processing.
 7. Inspect each Gold notebook result and validate the resulting tables.
 8. Review notification outcome and record exceptions.
 
-**Orchestration gate:** the master pipeline now starts Silver-to-Gold only when both source branches have `Succeeded`. The email notification remains dependent on Gold being `Completed`, so notification can still run after a Gold success or failure. A successful parent run and table-level audit/data checks are still required before accepting outputs.
+**Orchestration gate:** the master waits for both source branches using `Completed`, then evaluates their `Status` values. It invokes `PL_SILVER_TO_GOLD` only when both are `Succeeded`. The email activity depends on the gate's `Completed` path, so it runs after Gold success or failure and also after Gold is skipped because one or both source branches failed. The notification subject combines these branch statuses with the table-level audit failure count; this avoids reporting SUCCESS when a source dispatcher fails before it can create per-table audit rows. A successful parent run and table-level audit/data checks are still required before accepting outputs.
 
 ## 4. Monitoring and audit interpretation
 
@@ -85,6 +87,8 @@ ORDER BY updated_timestamp DESC;
 | Databricks notebook output | Notebook result, often processed row count | Reconcile against target data |
 
 The audit table uses `(adf_run_id, table_id, stage)` as its natural key: one record per configured object and stage in a parent ADF run. Source and Gold ForEach loops upsert `IN_PROGRESS` with `MERGE ... WITH (HOLDLOCK)`, so a retry reinitializes the same run-stage record. Success/failure updates include the stage predicate. This is a latest-attempt summary for that parent run, not an attempt-by-attempt event history. Retain ADF activity output, Databricks run output, source/target counts, and checkpoint evidence as supporting records.
+
+Both source-to-Silver and Silver-to-Gold pipelines fail closed when their metadata lookup returns no active configurations. This prevents an empty ForEach from being treated as a successful processing stage and avoids publishing downstream outputs from stale inputs.
 
 ## 5. Load strategies and watermark handling
 
