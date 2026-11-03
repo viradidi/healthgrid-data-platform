@@ -15,7 +15,7 @@ This is a static review of the committed implementation and documentation. It is
 
 | Area | Assets | Purpose |
 |---|---|---|
-| PostgreSQL | Fresh source DDL, gated source reset, UTC timestamp defaults, patient `updated_at` trigger/migration, and incremental-load SQL | Hospital, doctor, and patient source entities; initialization refuses existing tables and reset requires explicit session authorization |
+| PostgreSQL | Fresh source DDL, gated source reset, UTC timestamp defaults, patient `updated_at` trigger/migration, and replay-guarded incremental fixtures | Hospital, doctor, and patient source entities; initialization refuses existing tables, reset requires explicit session authorization, and incremental fixture rounds reject replay |
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
 | Control metadata | Fresh control-table DDL, gated control reset, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records; initialization and reset are separately guarded |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
@@ -47,6 +47,7 @@ Metadata drives the end-to-end framework and execution/selection; the individual
 | docs/OPERATIONS_RUNBOOK.md | Monitoring, audit, checkpoints, troubleshooting, and recovery |
 | docs/VALIDATION_PLAN.md | Metadata, ADF, Bronze, Silver, watermark, audit, and Gold test scenarios |
 | docs/DEPLOYMENT.md | Environment inventory, secure configuration, deployment, rollback, and cost cleanup |
+| docs/SOURCE_FIXTURE_CONTRACT.md | PostgreSQL fixture sequence and row-count expectations, CSV append/snapshot semantics, replay rules, and runtime evidence |
 | docs/NOTIFICATION_CONTRACT.md | ADF producer payload, parent status semantics, Logic Apps compatibility boundary, and delivery limitations |
 
 ## Findings and actions
