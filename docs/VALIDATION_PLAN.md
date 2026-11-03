@@ -389,3 +389,10 @@ A test is PASS only when its acceptance criteria are supported by captured evide
 - **LB-02:** CSV metadata accepts only `.csv` files; Parquet metadata accepts only `.parquet` files.
 - **LB-03:** A visible file with an unexpected extension fails before Spark reads or writes Bronze.
 - **LB-04:** An empty batch follows the configured NO_DATA contract, while missing volume/access errors fail the run.
+
+### Bronze-to-Silver DATA/NO_DATA handoff
+
+- **SB-01:** ADF passes the Landing-to-Bronze `runOutput` explicitly to the Silver `landing_status` widget.
+- **SB-02:** A missing, blank, or unsupported status fails before Silver reads or writes data.
+- **SB-03:** `NO_DATA` exits before Silver writes and returns zero processed records.
+- **SB-04:** A `NO_DATA` run must not advance a PostgreSQL watermark; a `DATA` run may advance it only after successful Silver processing and manifest finalization.
