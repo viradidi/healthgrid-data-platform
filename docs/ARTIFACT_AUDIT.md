@@ -5,6 +5,8 @@ This is a static review of the committed implementation and documentation. It is
 ## Project identity
 
 - Project: HealthGrid; original name: CareSync.
+- The business scenario represents a simulated multi-site healthcare network. Checked-in patient, clinician, hospital, and laboratory-event records are synthetic; provider-reference names are fictional demo entities and contact addresses use placeholder `.example` domains.
+- Gold result-status metrics are operational reporting examples only. No clinical decision logic, real patient data, provider contracts, or live clinical-system integration is represented.
 - The project owner confirms the original implementation ran successfully end-to-end. Some Azure resources were later decommissioned to control cost.
 - The repository's ADF and Databricks artifacts use HealthGrid naming conventions. Environment-specific endpoints and compute identifiers are represented by placeholders in linked services and must be populated during deployment.
 - The original architecture image at assets/architecture-overview.png is protected and must remain unchanged.
