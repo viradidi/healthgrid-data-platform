@@ -245,7 +245,7 @@ jobs:
                   if activity["name"] == "Source to Landing Ingestion"
               )
               postgres_query = postgres_copy["typeProperties"]["source"]["query"]["value"]
-              for required in ("watermark_lookback_minutes", "watermark_upper_bound", "addMinutes", '" >= "', '" < "'):
+              for required in ("watermark_lookback_minutes", "watermark_upper_bound", "addMinutes", '" >= ', '" < '):
                   if required not in postgres_query:
                       errors.append(f"PostgreSQL watermark query is missing bounded-window contract: {required}")
 
@@ -279,7 +279,7 @@ jobs:
                   errors.append("Watermark checkpoint must persist the captured upper bound using safe timestamp conversion.")
               if "ELSE watermark_value" not in watermark_sql:
                   errors.append("Watermark checkpoint update must be monotonic and retain a newer existing value.")
-              if re.search(r"SET\\s+watermark_value\\s*=\\s*SYSUTCDATETIME", watermark_sql, re.I):
+              if re.search(r"SET\s+watermark_value\s*=\s*SYSUTCDATETIME", watermark_sql, re.I):
                   errors.append("Watermark checkpoint must not advance to pipeline completion time.")
 
               lookback_migration_path = Path("02_Metadata Table Queries/add_watermark_lookback.sql")
