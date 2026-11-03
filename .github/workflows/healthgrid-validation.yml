@@ -980,7 +980,7 @@ jobs:
                   "README.md": [
                       "Before each `CREATE OR REPLACE TABLE`",
                       "Gold now fails closed on duplicate event IDs",
-                      "not automatically deduplicating Silver",
+                      "rather than automatically deduplicating Silver",
                   ],
                   "docs/ARTIFACT_AUDIT.md": [
                       "pre-publication input-integrity checks",
@@ -989,7 +989,7 @@ jobs:
                   ],
                   "docs/OPERATIONS_RUNBOOK.md": [
                       "Fresh source initialization",
-                      "does not drop existing source tables",
+                      "does not drop existing data",
                       "duplicate `lab_result_id`",
                   ],
               }
