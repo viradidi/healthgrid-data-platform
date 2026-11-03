@@ -18,8 +18,8 @@ CREATE TABLE hospitals (
     state           VARCHAR(50),
     hospital_type   VARCHAR(50),   -- General, Specialty, Teaching
     bed_count       INT,
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at      TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW()),
+    updated_at      TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW())
 );
 
 /* ---------------------------------------------------------------------
@@ -32,13 +32,13 @@ CREATE TABLE doctors (
     specialty       VARCHAR(100),
     hospital_id     INT REFERENCES hospitals (hospital_id),
     phone_number    VARCHAR(20),
-    created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at      TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW()),
+    updated_at      TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW())
 );
 
 /* ---------------------------------------------------------------------
    3. patients — patient registration & demographics (MERGE load)
-      watermark_column = updated_at, merge_keys = patient_id
+      watermark_column = updated_at (UTC), merge_keys = patient_id
    --------------------------------------------------------------------- */
 CREATE TABLE patients (
     patient_id              SERIAL PRIMARY KEY,
@@ -51,8 +51,8 @@ CREATE TABLE patients (
     registered_hospital_id   INT REFERENCES hospitals (hospital_id),
     insurance_provider_id    INT,   -- logical FK to insurance_providers.csv (ADLS); no DB-level
                                     -- constraint since that table lives outside this database
-    created_at               TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at               TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at               TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW()),
+    updated_at               TIMESTAMP NOT NULL DEFAULT timezone('UTC', NOW())
 );
 
 /* =====================================================================
@@ -107,7 +107,7 @@ CROSS JOIN generate_series(1, 10) AS n;
 -- 3. patients: ~100 per hospital (~5000 rows), city/state inherited from
 --    the registering hospital; insurance_provider_id spread across the 25
 --    providers in insurance_providers.csv; watermark_column (updated_at)
---    defaults to NOW()
+--    defaults to UTC
 INSERT INTO patients (first_name, last_name, date_of_birth, gender, city, state, registered_hospital_id, insurance_provider_id)
 SELECT
     (ARRAY['James','Mary','Robert','Patricia','John','Jennifer','Michael','Linda','David',
