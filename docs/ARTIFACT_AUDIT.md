@@ -13,7 +13,7 @@ This is a static review of the committed implementation and documentation. It is
 
 | Area | Assets | Purpose |
 |---|---|---|
-| PostgreSQL | Source DDL and incremental-load SQL | Hospital, doctor, and patient source entities |
+| PostgreSQL | Source DDL, UTC timestamp defaults, patient `updated_at` trigger, and incremental-load SQL | Hospital, doctor, and patient source entities with reliable update timestamp maintenance |
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
 | Control metadata | Control-table DDL, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
@@ -62,7 +62,7 @@ The master pipeline was updated so Gold requires both source branches to be Succ
 
 - Landing-to-Bronze appends batches and blocks exact landing-timestamp replay. The CSV branch now tracks file versions through `ctrl.file_ingestion_manifest`; unresolved prior-run IN_PROGRESS/COPIED states require reconciliation. Revised whole-file snapshots can still duplicate rows under APPEND.
 - Silver MERGE receives the configured `watermark_column` as its DATE/TIMESTAMP source-version field. It rejects null/duplicate source keys, null source versions, invalid target keys, and schema mismatches; older versions cannot overwrite newer rows, identical equal-version replays are no-ops, and equal-version payload conflicts fail for reconciliation. Runtime data scenarios remain part of the redeployment validation plan.
-- PostgreSQL incremental extraction now uses a metadata-configured lookback, a fixed UTC upper bound captured at run start, inclusive/exclusive query boundaries, and monotonic checkpoint advancement after Silver succeeds. The patients row is seeded with a five-minute lookback and its `updated_at` source timestamps are normalized to UTC by the supplied PostgreSQL SQL.
+- PostgreSQL incremental extraction now uses a metadata-configured lookback, a fixed UTC upper bound captured at run start, inclusive/exclusive query boundaries, and monotonic checkpoint advancement after Silver succeeds. The patients row is seeded with a five-minute lookback and its `updated_at` source timestamps are normalized to UTC by the supplied PostgreSQL SQL. The patient update trigger refreshes the timestamp for every UPDATE, including source statements that omit `updated_at`.
 - The lookback reduces short visibility-delay and backdating risk but does not provide CDC or no-loss guarantees. Hard deletes are not captured; changes outside the lookback or changes that fail to update `updated_at` can still be missed. Runtime boundary/concurrency scenarios remain unexecuted until Azure is restored.
 - CSV source selection is file-manifest-based, with content MD5 optional.
 - Audit rows are unique by `(adf_run_id, table_id, stage)`; source and Gold starts use idempotent HOLDLOCK upserts and finalizers scope updates by stage. Retries update the single summary record; ADF history preserves individual attempt details.
