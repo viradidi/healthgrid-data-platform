@@ -216,6 +216,23 @@ The current PostgreSQL patients source uses a metadata-configured five-minute lo
 | AUD-10 | Existing-history migration precheck | Run migration against a disposable audit table containing duplicate natural keys | Migration stops before creating the unique index and does not delete historical rows |
 | AUD-11 | Concurrent upsert | Simulate two attempts to create the same run/table/stage key | HOLDLOCK plus unique index leaves exactly one audit row; losing attempt is surfaced for reconciliation |
 
+## 8A. Notification contract and delivery tests
+
+| ID | Scenario | Test procedure | Acceptance criteria |
+|---|---|---|---|
+| NOTIF-01 | Successful master run | Run both source branches and Gold successfully | Request contains parent run ID, all three Succeeded statuses, ordered audit rows, and SUCCESS subject |
+| NOTIF-02 | Source failure before audit initialization | Fail a source metadata Lookup before table iteration | Request still runs; parent source status is Failed; Gold is SKIPPED_SOURCE_FAILURE; empty status_table is accepted; subject is FAILED |
+| NOTIF-03 | Gold failure | Let both source branches succeed and fail one Gold notebook | Request reports source statuses Succeeded, Gold decision Failed, and a FAILED subject |
+| NOTIF-04 | Table-level failure | Fail a table stage after its audit row is initialized | status_table contains the scoped FAILED row and failed-count logic produces FAILED |
+| NOTIF-05 | External Parse JSON compatibility | Post representative success, source-failure, and empty-status-table payloads to the deployed Logic Apps trigger | The consumer accepts exact field names/types, including legacy email_receipients, and handles an empty array |
+| NOTIF-06 | HTTP endpoint failure | Use a disposable invalid endpoint or force a non-success response | Web Activity fails visibly; no false delivery success is reported |
+| NOTIF-07 | Endpoint timeout | Use a controlled endpoint that does not respond within the configured response timeout | Web Activity fails at the configured two-minute HTTP response timeout |
+| NOTIF-08 | Duplicate request handling | Submit the same adf_run_id twice in a disposable Logic Apps environment | Receiver-side deduplication prevents duplicate email delivery before automatic retries or manual redelivery are enabled |
+| NOTIF-09 | Mailbox delivery confirmation | Complete a test Logic Apps run to an approved test recipient | Logic Apps run and email action succeed; delivery is verified independently of ADF HTTP acknowledgement |
+
+The producer-side JSON structure is statically checked in repository CI. NOTIF-05 through NOTIF-09 require the external Logic Apps workflow and a test recipient; they are not proven by repository CI. The Logic Apps definition is not checked into this repository.
+
+
 The audit implementation now uses `(adf_run_id, table_id, stage)` as its natural key. Start activities use a `MERGE ... WITH (HOLDLOCK)` upsert, and status updates include the stage. This deliberately retains the latest attempt summary per table/stage/parent run; ADF execution history remains the source for per-attempt detail.
 
 ## 9. Gold analytical validation
@@ -289,6 +306,7 @@ Document excluded, rejected, duplicated, or late-arriving records. Every differe
 | G5 — Gold | Grain and business-metric assertions | All three Gold outputs reconcile |
 | G6 — Recovery | Failure injection and rerun evidence | Recovery does not silently lose or duplicate data |
 | G7 — Orchestration | Parent/child outcomes and audit trail | Failed upstream work cannot be accepted as successful end-to-end run |
+| G7A — Notification | Request contract, endpoint acknowledgement, Logic Apps run, and email-action evidence | Failure outcomes are observable and test notifications reach the approved test recipient |
 | G8 — Sign-off | Test report, exceptions, owner, run IDs | Critical tests pass or have explicit accepted exception |
 
 ## 12. Sign-off record
