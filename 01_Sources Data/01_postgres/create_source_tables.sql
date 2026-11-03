@@ -59,12 +59,12 @@ CREATE TABLE patients (
 CREATE OR REPLACE FUNCTION public.set_patients_updated_at_utc()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-AS $
+AS $healthgrid$
 BEGIN
     NEW.updated_at := timezone('UTC', clock_timestamp());
     RETURN NEW;
 END;
-$;
+$healthgrid$;
 
 DROP TRIGGER IF EXISTS trg_patients_updated_at_utc ON patients;
 CREATE TRIGGER trg_patients_updated_at_utc
