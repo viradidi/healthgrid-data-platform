@@ -956,6 +956,25 @@ jobs:
                       errors.append(f"{model_name} contains an orphan expression before its output validation cell.")
                   if "required_columns" not in model_source or "duplicate_" not in model_source:
                       errors.append(f"{model_name} must retain its schema and grain validation.")
+                  required_input_checks = {
+                      "patient_360": [
+                          "lab_result_id", "assert_unique_non_null_key",
+                          "orphan_patient_events", "orphan_hospital_refs", "orphan_provider_refs",
+                          "allowed_statuses", "invalid_lab_events",
+                      ],
+                      "hospital_daily_summary": [
+                          "lab_result_id", "assert_unique_non_null_key",
+                          "orphan_hospital_events", "orphan_doctor_events",
+                          "missing_calendar_dates", "allowed_statuses", "invalid_lab_events",
+                      ],
+                      "lab_test_trends": [
+                          "lab_result_id", "assert_unique_non_null_key",
+                          "missing_calendar_months", "allowed_statuses", "invalid_lab_events",
+                      ],
+                  }
+                  for required in required_input_checks[model_name]:
+                      if required not in model_source:
+                          errors.append(f"{model_name} is missing Gold input quality check: {required}.")
               gold_fail_update = find_activity(gold_pipeline, "Update Fialed Status")
               gold_fail_terminator = find_activity(gold_pipeline, "Update pipeline as failed")
               if not gold_fail_update or not gold_fail_terminator:
