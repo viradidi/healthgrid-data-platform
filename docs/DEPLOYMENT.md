@@ -80,6 +80,7 @@ The repository also contains a recipient address in exported factory configurati
 - Load intended synthetic source fixtures.
 - Provision Azure SQL Database.
 - Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log (including its unique run/table/stage key), and ctrl.file_ingestion_manifest.
+- For an existing control database, run `02_Metadata Table Queries/add_watermark_lookback.sql` after the control tables exist. It adds `watermark_lookback_minutes` and initializes the existing PostgreSQL patients configuration to five minutes without changing current watermark checkpoints. Fresh installs receive the same field and value from `create_control_tables.sql`.
 - For an existing control database, pause ADF triggers and run `02_Metadata Table Queries/migrate_audit_log_unique_key.sql`. The migration performs a duplicate precheck and fails without deleting history if duplicates exist.
 - Verify seeded source and Gold metadata rows.
 - Confirm timestamp-watermarked PostgreSQL objects have `ctrl.watermark` rows and inspect the file manifest table for CSV feeds. CSV file selection no longer depends on `ctrl.watermark`.
@@ -187,7 +188,7 @@ Only after D0–D7 pass:
 6. Run Gold only after required source datasets have succeeded.
 7. Record exceptions and controlled replay/backfill.
 
-The current implementation advances incremental watermarks to current UTC time, rather than the maximum source timestamp observed. It also uses strict greater-than extraction. Validate late-arriving data, timestamp boundaries, and source clock assumptions before relying on this checkpoint strategy for production completeness.
+The PostgreSQL patients load now uses a fixed UTC upper bound captured at the start of the table run and a metadata-configured five-minute lookback. The query uses an inclusive lower boundary and exclusive upper boundary; after Silver succeeds, the checkpoint advances to the captured upper bound through a monotonic update. The lookback can still miss changes that arrive or are backdated more than five minutes, does not capture deletes, and depends on `updated_at` being maintained in UTC. Validate the bounded-window, concurrency, and late-arrival cases in `docs/VALIDATION_PLAN.md` before relying on this pattern for production completeness.
 
 ## 7. Deployment-specific technical checks
 
