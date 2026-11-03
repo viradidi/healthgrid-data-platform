@@ -4,7 +4,7 @@
 
 HealthGrid is an educational data engineering project built with synthetic healthcare data. It demonstrates how a healthcare network can ingest relational operational data and external partner files, manage ingestion through metadata and audit controls, process data through a Bronze/Silver/Gold architecture, and publish curated analytical outputs.
 
-The platform was originally developed under the name **CareSync** and was later renamed **HealthGrid**. Some exported Azure and Databricks artifacts still contain legacy CareSync resource, catalog, or workspace identifiers. These are deployment references—not a different project—and should be aligned with the target environment when provisioning a newly named deployment.
+The platform was originally developed under the name **CareSync** and later renamed **HealthGrid**. CareSync is retained here only as project history; the committed ADF, Databricks, and deployment artifacts now use HealthGrid naming conventions.
 
 ## Business problem
 
@@ -155,14 +155,14 @@ A redeployment should follow this high-level sequence:
 2. Configure linked services and credentials through secure deployment configuration and Azure Key Vault.
 3. Create the source tables and load the supplied synthetic source data.
 4. Create and seed the control metadata tables, including the file-ingestion manifest.
-5. Configure the landing paths, Databricks catalog and schemas, notebook paths, and ADF references for the target environment.
+5. Create the `healthgrid` Unity Catalog catalog with the required `landing`, `bronze`, `silver`, and `gold` schemas, create the landing Volume, import notebooks under `/Shared/HealthGrid/`, and configure the target environment's Azure endpoints and compute references.
 6. Publish the ADF factory and pipeline assets.
 7. Run the master pipeline and verify the source-to-Silver and Silver-to-Gold audit records.
 8. Reconcile source, Bronze, Silver, and Gold record counts and inspect the resulting analytical tables.
 
 The source-table creation script contains DROP TABLE statements and is intended for controlled initial setup or reset in a disposable environment. Do not run it against an environment containing data that must be retained.
 
-Legacy CareSync identifiers appear in some exported resource names and notebook paths. When deploying with newly named resources, update the related ADF paths, Databricks catalog references, storage paths, and factory configuration as one coordinated environment change rather than changing isolated strings.
+The repository uses the `healthgrid` catalog and `/Volumes/healthgrid/landing/landing_volume` for Databricks storage. ADF notebook activities point to `/Shared/HealthGrid/`; import the notebooks at those workspace paths or update the ADF references consistently. Linked-service exports use explicit placeholders for the target Key Vault, ADLS account, Azure SQL server/database/user, Databricks workspace, and cluster. Replace these placeholders before publishing. Credentials continue to be resolved through Key Vault references.
 
 ## Data handling and project scope
 
