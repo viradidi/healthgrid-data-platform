@@ -50,7 +50,7 @@
           "source": {
             "type": "AzureSqlSource",
             "sqlReaderQuery": {
-              "value": "SELECT table_id, source_system, source_schema_name, source_table_name, source_file_format, source_path, bronze_table_name, silver_table_name, gold_table_name, load_type, watermark_column, watermark_lookback_minutes, merge_keys, stage, is_active\nFROM ctrl.table_config\nWHERE table_id = @{pipeline().parameters.table_id} AND is_active = 1",
+              "value": "SELECT table_id, source_system, source_schema_name, source_table_name, source_file_format, source_path, bronze_table_name, silver_table_name, gold_table_name, load_type, watermark_column, watermark_lookback_minutes, merge_keys, stage, is_active\nFROM ctrl.table_config\nWHERE table_id = @{pipeline().parameters.table_id} AND is_active = 1 AND stage = 'SOURCE_TO_SILVER'",
               "type": "Expression"
             },
             "queryTimeout": "02:00:00",
