@@ -1,5 +1,5 @@
 /* =====================================================================
-   CareSync Health Network — Control/Metadata Framework
+   HealthGrid Health Network — Control/Metadata Framework
    Target: Azure SQL Database
    Creates the ctrl schema + control/metadata tables, then seeds table_config
    with the 5 source objects (3 Postgres tables + 2 ADLS CSV files)
