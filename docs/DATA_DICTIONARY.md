@@ -140,7 +140,7 @@ One configuration row represents a source object/file or a Gold output. This is 
 | watermark_value | Persisted timestamp checkpoint for timestamp-watermarked sources (PostgreSQL in this project) |
 | last_updated_timestamp | Time the checkpoint record was updated |
 
-Timestamp watermark rows are seeded for PostgreSQL incremental configurations. ADLS CSV sources use the file manifest instead of `ctrl.watermark`. The patients source is seeded with a five-minute lookback; other source metadata defaults to zero. ADF captures a UTC run-start upper bound and extracts `[previous_watermark - lookback, run_start_upper_bound)`. After Silver succeeds, the checkpoint is advanced to that captured upper bound using a monotonic update.
+Timestamp watermark rows are seeded for PostgreSQL incremental configurations. ADLS CSV sources use the file manifest instead of `ctrl.watermark`. The patients source is seeded with a five-minute lookback; other source metadata defaults to zero. ADF captures a UTC run-start upper bound and extracts `[previous_watermark - lookback, run_start_upper_bound)`. After Silver succeeds, the checkpoint is advanced to that captured upper bound using a monotonic update. The PostgreSQL source DDL maintains `patients.updated_at` with a UTC `BEFORE UPDATE` trigger.
 
 ### 3.3 ctrl.audit_log
 
