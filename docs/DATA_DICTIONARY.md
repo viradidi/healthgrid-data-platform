@@ -62,7 +62,7 @@ The control framework is shared across the processing stages. Active configurati
 | registered_hospital_id | Hospital at which the patient is registered |
 | insurance_provider_id | Logical reference to the partner insurance-provider feed |
 | created_at | Source record creation timestamp |
-| updated_at | Source update timestamp and configured incremental watermark |
+| updated_at | UTC source update timestamp and configured incremental watermark |
 
 **Configured load:** MERGE.
 
