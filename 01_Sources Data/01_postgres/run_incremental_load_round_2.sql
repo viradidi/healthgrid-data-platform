@@ -27,8 +27,8 @@ WITH new_hospital AS (
         'FL',
         'Community',
         180,
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
+        timezone('UTC', CURRENT_TIMESTAMP),
+        timezone('UTC', CURRENT_TIMESTAMP)
     )
     RETURNING hospital_id
 )
@@ -47,8 +47,8 @@ SELECT
     doctor.specialty,
     new_hospital.hospital_id,
     doctor.phone_number,
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
+    timezone('UTC', CURRENT_TIMESTAMP),
+    timezone('UTC', CURRENT_TIMESTAMP)
 FROM new_hospital
 CROSS JOIN (VALUES
     ('Grace', 'Morgan', 'Pediatrics', '555-9101'),
@@ -62,14 +62,14 @@ UPDATE hospitals
 SET
     bed_count = bed_count + 30,
     hospital_type = 'Teaching',
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE hospital_id = 2;
 
 UPDATE doctors
 SET
     specialty = 'Gastroenterology',
     phone_number = '555-0202',
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE doctor_id = 2;
 
 /* ---------------------------------------------------------------------
@@ -96,8 +96,8 @@ SELECT
     'FL',
     hospital.hospital_id,
     patient.insurance_provider_id,
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
+    timezone('UTC', CURRENT_TIMESTAMP),
+    timezone('UTC', CURRENT_TIMESTAMP)
 FROM hospitals AS hospital
 CROSS JOIN (VALUES
     ('Isabella', 'Hayes', DATE '1990-02-14', 'F', 3),
@@ -117,7 +117,7 @@ SET
     state = 'AZ',
     registered_hospital_id = 6,
     insurance_provider_id = 8,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE patient_id = 2;
 
 UPDATE patients
@@ -126,7 +126,7 @@ SET
     city = 'Chicago',
     state = 'IL',
     registered_hospital_id = 10,
-    updated_at = CURRENT_TIMESTAMP
+    updated_at = timezone('UTC', CURRENT_TIMESTAMP)
 WHERE patient_id = 3500;
 
 COMMIT;
