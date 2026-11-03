@@ -1,22 +1,47 @@
-/* =====================================================================
-   CareSync Health Network — Control/Metadata Framework
-   Target: Azure SQL Database
-   Drops the 4 control tables in FK-safe order (child tables first).
-   Run this before re-running create_control_tables.sql.
-   ===================================================================== */
+/*
+   HealthGrid — destructive Azure SQL control-table reset
+   Target: the CURRENT Azure SQL database, schema ctrl.
 
-IF OBJECT_ID('ctrl.file_ingestion_manifest', 'U') IS NOT NULL
-    DROP TABLE ctrl.file_ingestion_manifest;
-GO
+   WARNING: this permanently deletes table_config, watermark, audit_log,
+   and file_ingestion_manifest, including all metadata, checkpoints, audit
+   history, and file replay state. Use only in a disposable DEV database
+   after verifying the server, database, and absence of active ADF runs.
 
-IF OBJECT_ID('ctrl.audit_log', 'U') IS NOT NULL
-    DROP TABLE ctrl.audit_log;
-GO
+   Explicit opt-in is required on the SAME SQL session:
+     EXEC sys.sp_set_session_context
+       @key = N'healthgrid_allow_destructive_reset', @value = 1;
+   Then execute this script on that same connection. This script never sets
+   the confirmation flag itself. Without the opt-in it stops before DDL.
+*/
 
-IF OBJECT_ID('ctrl.watermark', 'U') IS NOT NULL
-    DROP TABLE ctrl.watermark;
-GO
+IF ISNULL(TRY_CONVERT(INT, SESSION_CONTEXT(N'healthgrid_allow_destructive_reset')), 0) <> 1
+BEGIN
+    THROW 51041, 'Destructive reset blocked. Set the explicit session context only after confirming this is a disposable DEV database.', 1;
+END;
 
-IF OBJECT_ID('ctrl.table_config', 'U') IS NOT NULL
-    DROP TABLE ctrl.table_config;
-GO
+PRINT CONCAT('HealthGrid control-table reset explicitly authorized for database: ', DB_NAME());
+
+SET XACT_ABORT ON;
+
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    IF OBJECT_ID('ctrl.file_ingestion_manifest', 'U') IS NOT NULL
+        DROP TABLE ctrl.file_ingestion_manifest;
+
+    IF OBJECT_ID('ctrl.audit_log', 'U') IS NOT NULL
+        DROP TABLE ctrl.audit_log;
+
+    IF OBJECT_ID('ctrl.watermark', 'U') IS NOT NULL
+        DROP TABLE ctrl.watermark;
+
+    IF OBJECT_ID('ctrl.table_config', 'U') IS NOT NULL
+        DROP TABLE ctrl.table_config;
+
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0
+        ROLLBACK TRANSACTION;
+    THROW;
+END CATCH;
