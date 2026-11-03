@@ -42,7 +42,7 @@
         "userProperties": [],
         "typeProperties": {
           "variableName": "body_header",
-          "value": "Ingestion and transformation for the HealthGrid data platform has completed. The run status is summarized below:"
+          "value": "The HealthGrid master run has finished. The branch outcomes and table-level audit records are summarized below:"
         }
       },
       {
@@ -78,7 +78,7 @@
         "typeProperties": {
           "variableName": "email_subject",
           "value": {
-            "value": "@{pipeline().globalParameters.env} | @{if(greater(activity('Check overall failed count').output.firstRow.count,0),'FAILED','SUCCESS')} | HEALTHGRID MASTER RUN",
+            "value": "@{pipeline().globalParameters.env} | @{if(and(equals(pipeline().parameters.postgres_status,'Succeeded'),and(equals(pipeline().parameters.adls_status,'Succeeded'),and(equals(pipeline().parameters.gold_status,'Succeeded'),equals(activity('Check overall failed count').output.firstRow.count,0)))),'SUCCESS','FAILED')} | HEALTHGRID MASTER RUN",
             "type": "Expression"
           }
         }
@@ -148,7 +148,7 @@
         "typeProperties": {
           "variableName": "logic_apps_body",
           "value": {
-            "value": "{\n\"subject\":\"@{variables('email_subject')}\",\n\"email_receipients\":\"@{pipeline().globalParameters.email_receipent}\",\n\"body_header\":\"@{variables('body_header')}\",\n\"body_footer\":\"@{variables('body_footer')}\",\n\"status_table\": @{activity('Read All tables status').output.value}\n}",
+            "value": "{\n\"subject\":\"@{variables('email_subject')}\",\n\"email_receipients\":\"@{pipeline().globalParameters.email_receipent}\",\n\"body_header\":\"@{variables('body_header')}\",\n\"body_footer\":\"@{variables('body_footer')}\",\n\"pipeline_statuses\": {\n  \"postgres_source_to_silver\": \"@{pipeline().parameters.postgres_status}\",\n  \"adls_csv_source_to_silver\": \"@{pipeline().parameters.adls_status}\",\n  \"gold_stage\": \"@{pipeline().parameters.gold_status}\"\n},\n\"status_table\": @{activity('Read All tables status').output.value}\n}",
             "type": "Expression"
           }
         }
@@ -192,6 +192,18 @@
       "adf_run_id": {
         "type": "string",
         "defaultValue": "75665097-3ceb-47cb-ab64-21ecc398576c"
+      },
+      "postgres_status": {
+        "type": "string",
+        "defaultValue": "NOT_PROVIDED"
+      },
+      "adls_status": {
+        "type": "string",
+        "defaultValue": "NOT_PROVIDED"
+      },
+      "gold_status": {
+        "type": "string",
+        "defaultValue": "NOT_PROVIDED"
       }
     },
     "variables": {
