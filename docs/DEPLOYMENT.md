@@ -78,6 +78,7 @@ The repository also contains a recipient address in exported factory configurati
 
 - Provision PostgreSQL and create source tables using the source SQL scripts.
 - Load intended synthetic source fixtures.
+- For an existing PostgreSQL `patients` table, run `01_Sources Data/01_postgres/install_patients_updated_at_trigger.sql` to install the trigger without dropping source data. Fresh installs receive the trigger from `create_source_tables.sql`.
 - Verify the PostgreSQL `trg_patients_updated_at_utc` trigger exists and updates `patients.updated_at` when a patient row changes without an explicit timestamp assignment.
 - Provision Azure SQL Database.
 - Run 02_Metadata Table Queries/create_control_tables.sql to create ctrl.table_config, ctrl.watermark, ctrl.audit_log (including its unique run/table/stage key), and ctrl.file_ingestion_manifest.
