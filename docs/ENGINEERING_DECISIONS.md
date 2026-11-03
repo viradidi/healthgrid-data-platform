@@ -49,6 +49,8 @@ The framework supports three configured write strategies:
 
 The sample configuration uses FULL for hospitals, doctors, and insurance providers; MERGE for patients; and APPEND for laboratory results.
 
+The ADF dispatcher allow-lists the two configured source systems. The inner pipeline validates a positive integer table ID and retrieves only active SOURCE_TO_SILVER metadata before source dispatch. PostgreSQL schema/table/watermark identifiers are quoted and embedded quotes are escaped; incremental watermark rows must exist and convert to DATETIME2(6) before Copy. A single captured UTC upper bound is reused for source extraction and checkpointing, and the checkpoint update is monotonic and row-count-checked. This keeps the source extraction boundary explicit without moving dataset-specific transformation logic into metadata.
+
 ## 5. Watermark-based extraction
 
 **Decision:** Use a persisted watermark for incremental source extraction rather than implementing a full CDC service.
