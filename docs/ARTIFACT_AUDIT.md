@@ -19,7 +19,7 @@ This is a static review of the committed implementation and documentation. It is
 | Partner feeds | Initial and incremental CSV fixtures | Laboratory results and insurance providers |
 | Control metadata | Fresh control-table DDL, gated control reset, watermark-lookback migration, audit uniqueness migration, and audit SQL | Configuration, bounded PostgreSQL watermarks, per-file manifest, and idempotent run/table/stage audit records; initialization and reset are separately guarded |
 | Mapping | Silver-to-Gold STTM workbook | Analytical source-to-target mapping |
-| ADF | Factory, pipelines, datasets, linked services | Orchestration, metadata lookup, audit, and notifications |
+| ADF | Factory, pipelines, datasets, linked services | Orchestration, active metadata selection, guarded PostgreSQL extraction, bounded watermarking, file manifest, audit, and notifications |
 | Databricks ingestion | Landing-to-Bronze notebook | Validates source/batch metadata, reserved columns and case-insensitive schema; blocks exact same-batch replay |
 | CSV file manifest | `ctrl.file_ingestion_manifest` and ADF per-file Copy loop | Tracks source file versions through IN_PROGRESS, COPIED, PROCESSED, and FAILED states |
 | Databricks transformation | Bronze-to-Silver notebook | Fail-closed FULL/APPEND/MERGE routing; version-aware MERGE with source/target key, column-name, and data-type validation |
