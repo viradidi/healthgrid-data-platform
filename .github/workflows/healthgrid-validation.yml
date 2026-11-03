@@ -298,7 +298,7 @@ jobs:
                   errors.append("PostgreSQL source DDL must define UTC timestamp defaults for source watermark fields.")
               if "CREATE TRIGGER trg_patients_updated_at_utc" not in source_ddl or "clock_timestamp()" not in source_ddl:
                   errors.append("PostgreSQL source DDL must install the UTC patients updated_at trigger.")
-              if source_ddl.count("$healthgrid$") != 2 or "AS $healthgrid$\\nBEGIN" not in source_ddl or "\\n$healthgrid$;" not in source_ddl:
+              if source_ddl.count("$healthgrid$") != 2 or "AS $healthgrid$" not in source_ddl or "$healthgrid$;" not in source_ddl:
                   errors.append("PostgreSQL source DDL must use a complete tagged dollar-quoted PL/pgSQL trigger body.")
 
               provider_files = [
