@@ -567,7 +567,119 @@ jobs:
               if "target schema does not match" not in silver_source.lower():
                   errors.append("Silver MERGE must fail closed when source and target schemas differ.")
 
-              # Static contract checks for bounded, overlap-window PostgreSQL watermarking.
+              # ADF metadata-to-source extraction contract.
+          main_pipeline_path = Path("04_Azure Data Factory Repository/pipeline/PL_SOURCE_TO_SILVER_MAIN.json")
+          if main_pipeline_path.is_file():
+              main_source_pipeline = json.loads(main_pipeline_path.read_text(encoding="utf-8"))
+              main_activities = {a.get("name"): a for a in main_source_pipeline["properties"]["activities"]}
+              source_parameter_guard = main_activities.get("Validate Source System Parameter", {})
+              source_parameter_expression = source_parameter_guard.get("typeProperties", {}).get("expression", {}).get("value", "")
+              if not all(token in source_parameter_expression for token in ("neon_postgres", "adls_csv")):
+                  errors.append("Source dispatcher must allow-list only neon_postgres and adls_csv.")
+              source_lookup = main_activities.get("Read Source Tables List", {})
+              source_lookup_query = source_lookup.get("typeProperties", {}).get("source", {}).get("sqlReaderQuery", {}).get("value", "")
+              if "is_active = 1" not in source_lookup_query or "stage = 'SOURCE_TO_SILVER'" not in source_lookup_query:
+                  errors.append("Source dispatcher lookup must select only active SOURCE_TO_SILVER metadata.")
+              if "replace(pipeline().parameters.source_system,'''','''''')" not in source_lookup_query:
+                  errors.append("Source dispatcher must escape its source_system value in the metadata SQL query.")
+              if not any(d.get("activity") == "Validate Source System Parameter" and "Succeeded" in d.get("dependencyConditions", []) for d in source_lookup.get("dependsOn", [])):
+                  errors.append("Source metadata lookup must depend on successful source_system allow-list validation.")
+
+          table_id_parameter = pipeline.get("properties", {}).get("parameters", {}).get("table_id", {})
+          if table_id_parameter.get("type") != "int":
+              errors.append("Inner source pipeline table_id parameter must be an integer, not a string.")
+          table_id_guard = by_name.get("Validate Table ID", {})
+          table_id_guard_expression = table_id_guard.get("typeProperties", {}).get("expression", {}).get("value", "")
+          if "greater(pipeline().parameters.table_id,0)" not in table_id_guard_expression:
+              errors.append("Inner source pipeline must reject non-positive table IDs before metadata lookup.")
+          table_id_guard_false = table_id_guard.get("typeProperties", {}).get("ifFalseActivities", [])
+          if not any(a.get("type") == "Fail" for a in table_id_guard_false):
+              errors.append("Invalid table_id must execute an explicit Fail activity.")
+
+          read_table_activity = by_name.get("Read Table Details", {})
+          read_table_query = read_table_activity.get("typeProperties", {}).get("source", {}).get("sqlReaderQuery", {}).get("value", "")
+          for required in ("SELECT table_id", "source_schema_name", "source_table_name", "load_type", "watermark_column", "watermark_lookback_minutes", "is_active = 1", "stage = 'SOURCE_TO_SILVER'"):
+              if required not in read_table_query:
+                  errors.append(f"Inner metadata lookup is missing explicit active-source projection/filter: {required}")
+          if "SELECT *" in read_table_query.upper():
+              errors.append("Inner source metadata lookup must explicitly project its required columns.")
+          if not any(d.get("activity") == "Validate Table ID" and "Succeeded" in d.get("dependencyConditions", []) for d in read_table_activity.get("dependsOn", [])):
+              errors.append("Read Table Details must depend on the positive table_id guard.")
+
+          source_config_guard = by_name.get("Validate Source Configuration", {})
+          source_config_expression = source_config_guard.get("typeProperties", {}).get("expression", {}).get("value", "")
+          for required in ("neon_postgres", "adls_csv", "source_schema_name", "source_table_name", "watermark_column", "watermark_lookback_minutes", "source_path", "source_file_format", "APPEND", "MERGE", "FULL"):
+              if required not in source_config_expression:
+                  errors.append(f"Inner source metadata validation is missing configuration check: {required}")
+          source_config_false = source_config_guard.get("typeProperties", {}).get("ifFalseActivities", [])
+          if not any(a.get("type") == "Fail" for a in source_config_false):
+              errors.append("Invalid source metadata must fail before Copy or notebook execution.")
+          check_load_dependencies = {d.get("activity") for d in by_name.get("Check load type", {}).get("dependsOn", [])}
+          if "Validate Source Configuration" not in check_load_dependencies:
+              errors.append("Watermark lookup and source dispatch must depend on successful source metadata validation.")
+
+          watermark_lookup = next(
+              (a for a in by_name.get("Check load type", {}).get("typeProperties", {}).get("ifTrueActivities", []) if a.get("name") == "Read watermark"),
+              {}
+          )
+          watermark_lookup_query = watermark_lookup.get("typeProperties", {}).get("source", {}).get("sqlReaderQuery", {}).get("value", "")
+          for required in ("LEFT JOIN ctrl.watermark", "watermark_is_valid", "TRY_CONVERT(DATETIME2(6)", "w.watermark_value IS NOT NULL"):
+              if required not in watermark_lookup_query:
+                  errors.append(f"Incremental PostgreSQL watermark lookup must expose a validity check: {required}")
+          validate_watermark = next(
+              (a for a in by_name.get("Check load type", {}).get("typeProperties", {}).get("ifTrueActivities", []) if a.get("name") == "Validate Watermark"),
+              {}
+          )
+          validate_watermark_expression = validate_watermark.get("typeProperties", {}).get("expression", {}).get("value", "")
+          if "watermark_is_valid" not in validate_watermark_expression or not any(a.get("type") == "Fail" for a in validate_watermark.get("typeProperties", {}).get("ifFalseActivities", [])):
+              errors.append("Missing/null/malformed incremental watermarks must fail before source extraction.")
+
+          postgres_case = next((case for case in switch.get("typeProperties", {}).get("cases", []) if case.get("value") == "neon_postgres"), {})
+          postgres_copy = next((a for a in postgres_case.get("activities", []) if a.get("name") == "Source to Landing Ingestion"), {})
+          postgres_query = postgres_copy.get("typeProperties", {}).get("source", {}).get("query", {}).get("value", "")
+          for required in ("@concat(", "replace(activity('Read Table Details').output.firstRow.source_schema_name", "replace(activity('Read Table Details').output.firstRow.source_table_name", "replace(activity('Read Table Details').output.firstRow.watermark_column", "watermark_value", "watermark_upper_bound", "watermark_lookback_minutes"):
+              if required not in postgres_query:
+                  errors.append(f"PostgreSQL source query is missing safely quoted, metadata-driven extraction element: {required}")
+          if "FROM \"" not in postgres_query or " AND \"" not in postgres_query:
+              errors.append("PostgreSQL source query must quote the schema, table, and watermark identifiers.")
+
+          watermark_checkpoint = next(
+              (a for a in by_name.get("Checking Load Type and Update Watermark", {}).get("typeProperties", {}).get("ifTrueActivities", []) if a.get("name") == "Update watermark"),
+              {}
+          )
+          watermark_checkpoint_sql = "\\n".join(
+              script.get("text", {}).get("value", "")
+              for script in watermark_checkpoint.get("typeProperties", {}).get("scripts", [])
+          )
+          if "IF @@ROWCOUNT <> 1" not in watermark_checkpoint_sql or "THROW 51035" not in watermark_checkpoint_sql:
+              errors.append("Watermark checkpoint update must fail unless exactly one selected watermark row is updated.")
+          success_audit = by_name.get("Update Success Status", {})
+          if not any(d.get("activity") == "Checking Load Type and Update Watermark" and "Succeeded" in d.get("dependencyConditions", []) for d in success_audit.get("dependsOn", [])):
+              errors.append("Source-to-Silver SUCCESS audit must wait for manifest finalization and the applicable checkpoint branch.")
+
+          def collect_sql_texts(value, key_path="root"):
+              results = []
+              if isinstance(value, dict):
+                  if key_path.endswith(".text") and isinstance(value.get("value"), str):
+                      results.append(value["value"])
+                  if key_path.endswith(".sqlReaderQuery") and isinstance(value.get("value"), str):
+                      results.append(value["value"])
+                  if key_path.endswith(".query") and isinstance(value.get("value"), str):
+                      results.append(value["value"])
+                  for child_key, child_value in value.items():
+                      results.extend(collect_sql_texts(child_value, key_path + "." + child_key))
+              elif isinstance(value, list):
+                  for child in value:
+                      results.extend(collect_sql_texts(child, key_path))
+              return results
+
+          main_sql_texts = collect_sql_texts(main_source_pipeline) if main_pipeline_path.is_file() else []
+          inner_sql_texts = collect_sql_texts(pipeline)
+          for sql_text in main_sql_texts + inner_sql_texts:
+              if "pipeline().parameters.adf_run_id" in sql_text and "replace(pipeline().parameters.adf_run_id,'''','''''')" not in sql_text:
+                  errors.append("ADF SQL must escape parent adf_run_id before interpolating it into SQL string literals.")
+
+          # Static contract checks for bounded, overlap-window PostgreSQL watermarking.
               postgres_case = next(
                   case for case in switch["typeProperties"]["cases"]
                   if case["value"] == "neon_postgres"
