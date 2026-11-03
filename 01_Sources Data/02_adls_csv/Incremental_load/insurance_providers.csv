@@ -1,31 +1,31 @@
 insurance_provider_id,provider_name,provider_type,contact_email,coverage_region
-1,Northstar Demo Benefits,PPO,contact@blueshieldhealth.example,National
-2,Cedarwell Demo Plan,HMO,support@aetnawellness.example,National
-3,Meridian Demo Health,PPO,help@unitedcareins.example,National
-4,HarborPoint Demo Coverage,HMO,info@cignahealthpartners.example,Regional - South
-5,PublicCare Demo Program,Government,contactus@medicare.example,National
-6,Summit Valley Demo Benefits,PPO,contact@healthfirstppo.example,Regional - South
-7,ClearPath Demo Health Plan,HMO,support@humanacareplus.example,National
-8,Westline Demo Cooperative,HMO,info@kpselect.example,Regional - West
-9,BluePeak Demo Assurance,PPO,contact@anthembluecross.example,Regional - West
-10,CommunityCare Demo Program,Government,support@medicaidstate.example,National
-11,ServiceMember Demo Health,Government,support@tricare.example,National
-12,Pinecrest Demo Coverage,HMO,help@molinahealth.example,Regional - South
-13,NovaBridge Demo Plan,PPO,contact@oscarhealth.example,National
-14,WellSpring Demo Member Services,HMO,support@wellcareadvantage.example,Regional - South
-15,Evergreen Demo Network,PPO,info@carefirstbc.example,Regional - Northeast
-16,Centauri Demo Health,HMO,contact@centenehealth.example,National
-17,Emberline Demo Coverage,PPO,updates@emblemhealth.example,Regional - Northeast
-18,Highland Demo Benefits,HMO,help@highmarkwholecare.example,Regional - Northeast
-19,LibertyField Demo Health,PPO,contact@ibx.example,Regional - Northeast
-20,Sunridge Demo Plan,PPO,support@sunlifehealth.example,Regional - South
-21,Crestview Demo Health,HMO,info@providencehealth.example,Regional - West
-22,Pacific Horizon Demo Coverage,PPO,contact@pacificsource.example,Regional - West
-23,LoneStar Demo Health Alliance,PPO,support@baylorscotthealth.example,Regional - South
-24,Riverbend Demo Care Network,HMO,help@ascensioncare.example,National
-25,ElevateWell Demo Coverage,HMO,contact@elevancehealth.example,National
-26,MapleGate Demo Benefits,PPO,contact@brighthealthalliance.example,Regional - Midwest
-27,Silverleaf Demo Health Network,HMO,support@cloverhealthnetwork.example,Regional - Northeast
-28,CoastalCare Demo Partners,PPO,info@sentarahealthplans.example,Regional - South
-29,GlobalBridge Demo Health,PPO,contact@geoblueintl.example,National
-30,GoldenYears Demo Benefits,HMO,support@devotedhealthsenior.example,National
+1,Northstar Demo Benefits,PPO,contact@provider01.example,National
+2,Cedarwell Demo Plan,HMO,contact@provider02.example,National
+3,Meridian Demo Health,PPO,contact@provider03.example,National
+4,HarborPoint Demo Coverage,HMO,contact@provider04.example,Regional - South
+5,PublicCare Demo Program,Government,contact@provider05.example,National
+6,Summit Valley Demo Benefits,PPO,contact@provider06.example,Regional - South
+7,ClearPath Demo Health Plan,HMO,contact@provider07.example,National
+8,Westline Demo Cooperative,HMO,contact@provider08.example,Regional - West
+9,BluePeak Demo Assurance,PPO,contact@provider09.example,Regional - West
+10,CommunityCare Demo Program,Government,contact@provider10.example,National
+11,ServiceMember Demo Health,Government,contact@provider11.example,National
+12,Pinecrest Demo Coverage,HMO,contact@provider12.example,Regional - South
+13,NovaBridge Demo Plan,PPO,contact@provider13.example,National
+14,WellSpring Demo Member Services,HMO,contact@provider14.example,Regional - South
+15,Evergreen Demo Network,PPO,contact@provider15.example,Regional - Northeast
+16,Centauri Demo Health,HMO,contact@provider16.example,National
+17,Emberline Demo Coverage,PPO,contact@provider17.example,Regional - Northeast
+18,Highland Demo Benefits,HMO,contact@provider18.example,Regional - Northeast
+19,LibertyField Demo Health,PPO,contact@provider19.example,Regional - Northeast
+20,Sunridge Demo Plan,PPO,contact@provider20.example,Regional - South
+21,Crestview Demo Health,HMO,contact@provider21.example,Regional - West
+22,Pacific Horizon Demo Coverage,PPO,contact@provider22.example,Regional - West
+23,LoneStar Demo Health Alliance,PPO,contact@provider23.example,Regional - South
+24,Riverbend Demo Care Network,HMO,contact@provider24.example,National
+25,ElevateWell Demo Coverage,HMO,contact@provider25.example,National
+26,MapleGate Demo Benefits,PPO,contact@provider26.example,Regional - Midwest
+27,Silverleaf Demo Health Network,HMO,contact@provider27.example,Regional - Northeast
+28,CoastalCare Demo Partners,PPO,contact@provider28.example,Regional - South
+29,GlobalBridge Demo Health,PPO,contact@provider29.example,National
+30,GoldenYears Demo Benefits,HMO,contact@provider30.example,National
