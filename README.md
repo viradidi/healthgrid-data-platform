@@ -179,6 +179,7 @@ The control framework includes:
 | [Validation plan](docs/VALIDATION_PLAN.md) | Repeatable tests, measurable acceptance criteria, and release gates |
 | [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
+| [Senior engineering readiness review](docs/SENIOR_ENGINEERING_READINESS.md) | Evidence-based assessment, capability ratings, and remaining engineering maturity gaps |
 | [CSV file ingestion manifest](docs/FILE_INGESTION_MANIFEST.md) | Per-file identity, manifest states, replay protection, and recovery procedure |
 | [Source fixture contract](docs/SOURCE_FIXTURE_CONTRACT.md) | PostgreSQL fixture execution order, one-time update guards, CSV snapshot/additive semantics, and expected counts |
 | [ADF source extraction contract](docs/ADF_SOURCE_EXTRACTION_CONTRACT.md) | Metadata validation, PostgreSQL identifier quoting, watermark boundaries, checkpoint behaviour, and landing hand-off |
@@ -231,4 +232,4 @@ These considerations are documented to make the implementation and its operation
 
 ## Project status
 
-**Completed end-to-end.** The platform was successfully executed in its original environment. Cloud resources may be decommissioned after completion to avoid ongoing costs; the repository retains the source scripts, orchestration exports, notebooks, sample data, mapping workbook, and architecture diagram.
+**Completed end-to-end — project-owner confirmed.** The platform was successfully executed in its original Azure environment. Cloud resources were later decommissioned to control ongoing costs; the repository retains the source scripts, orchestration exports, notebooks, sample data, mapping workbook, and original architecture diagram. The latest repository validation is [GitHub Actions run #289](https://github.com/viradidi/healthgrid-data-platform/actions/runs/41712998524), which completed successfully on 3 November 2026. That workflow validated 18 JSON files, 3 notebooks, and 3 Python files, together with extensive static repository contracts. It does not execute ADF, Spark/Delta transformations, or the external Logic Apps consumer. The original Azure execution remains owner-confirmed; the current cloud environment is not available for a fresh integration run. See the [senior engineering readiness review](docs/SENIOR_ENGINEERING_READINESS.md) for the detailed boundaries.

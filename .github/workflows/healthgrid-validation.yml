@@ -118,6 +118,7 @@ jobs:
               "docs/VALIDATION_PLAN.md",
               "docs/DEPLOYMENT.md",
               "docs/ARTIFACT_AUDIT.md",
+              "docs/SENIOR_ENGINEERING_READINESS.md",
               "docs/FILE_INGESTION_MANIFEST.md",
               "docs/SOURCE_FIXTURE_CONTRACT.md",
               "docs/ADF_SOURCE_EXTRACTION_CONTRACT.md",
