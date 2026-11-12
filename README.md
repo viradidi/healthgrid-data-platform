@@ -1,6 +1,10 @@
 # HealthGrid — Metadata-Driven Healthcare Data Platform
 
-**An Azure-based, metadata-driven data platform reference implementation for integrating simulated healthcare operations and partner feeds into analytics-ready datasets.**
+**An Azure-based, metadata-driven data platform for integrating simulated healthcare operations and partner feeds into governed, analytics-ready datasets.**
+
+**Stack:** PostgreSQL, Azure SQL Database, Azure Data Factory, ADLS Gen2, Azure Databricks, Apache Spark / PySpark, Delta Lake, Unity Catalog, SQL, GitHub Actions.
+
+> **Execution status — completed:** Successfully deployed and executed end to end in the original Azure environment. Cloud resources were later decommissioned to control ongoing costs; the repository preserves the implementation, deployment assets, synthetic source data, mapping workbook and architecture diagram.
 
 HealthGrid models a multi-site healthcare network with PostgreSQL operational tables and external CSV partner feeds. Azure Data Factory orchestrates ingestion and processing, Azure Data Lake Storage Gen2 provides the landing layer, and Azure Databricks transforms the data through Bronze, Silver, and Gold layers. The design emphasizes reusable metadata-driven execution, incremental processing, replay controls, auditability, and business-oriented analytical models.
 
@@ -73,6 +77,18 @@ The code map complements the architecture image; it does not replace or modify t
 | Source formats | PostgreSQL tables, CSV |
 | Data architecture | Bronze, Silver, Gold medallion layers |
 | Automation assets | Azure Data Factory JSON exports and Databricks notebooks |
+
+## Design decisions and trade-offs
+
+| Decision | Why it is used | Trade-off / boundary |
+|---|---|---|
+| Metadata-driven orchestration | ADF reads source, target, load-strategy and active-state configuration instead of duplicating a pipeline for every entity | Metadata contracts must be validated; the configured table and notebook references remain environment-specific |
+| Separate source branches | PostgreSQL and partner CSV feeds use distinct ingestion paths under a shared master workflow | Each source type needs its own cursor, retry and duplicate-handling semantics |
+| File-ingestion manifest for CSV | Tracks individual file versions and protects against replay of the same delivered file | Re-delivered or revised whole-file snapshots still need a clear business-level duplicate policy |
+| Timestamp watermarks for PostgreSQL | Provides bounded incremental extraction without introducing a separate CDC service | Watermarks are not CDC and can miss hard deletes and sufficiently late/backdated updates |
+| Gold full refresh | Rebuilds the curated analytical outputs from Silver in a predictable, auditable step | Compute grows with the Silver history; incremental Gold materialization would need separate change-impact logic |
+
+The detailed rationale and implementation contracts are recorded in [Engineering Decisions](docs/ENGINEERING_DECISIONS.md).
 
 ## Source systems and ingestion strategy
 
