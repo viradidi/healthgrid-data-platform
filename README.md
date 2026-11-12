@@ -12,6 +12,21 @@ HealthGrid models a multi-site healthcare network with PostgreSQL operational ta
 
 The platform was originally developed under the name **CareSync** and later renamed **HealthGrid**. CareSync is retained here only as project history; the committed ADF, Databricks, and deployment artifacts now use HealthGrid naming conventions.
 
+## Platform at a glance
+
+| Area | Implementation |
+|---|---|
+| Business domain | Simulated multi-site healthcare administration and partner feeds |
+| Operational source | PostgreSQL hospital, clinician and patient tables |
+| Partner data | Laboratory-result and insurance-provider CSV feeds |
+| Control plane | Azure SQL metadata, watermark, file-manifest and audit tables |
+| Orchestration | Azure Data Factory master and child pipelines |
+| Landing and storage | Azure Data Lake Storage Gen2 |
+| Processing | Azure Databricks, PySpark and Delta Lake |
+| Load strategies | FULL, APPEND and version-aware MERGE |
+| Analytical outputs | Patient 360, hospital daily summary and lab-test trends |
+| Governance | Unity Catalog and environment-specific deployment configuration |
+
 ## Business problem
 
 A multi-site healthcare network may need to consolidate administrative data from operational systems with laboratory and insurance-reference feeds delivered by external partners. The sources have different structures, delivery patterns, and update semantics. A robust platform must do more than copy data: it must select work from metadata, preserve batch lineage, handle incremental changes and file re-delivery, expose execution state, and prevent failed upstream processing from being presented as successful analytics.
