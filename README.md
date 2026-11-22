@@ -219,16 +219,17 @@ The control framework includes:
 
 ## Repository validation
 
-The repository has two deliberately separate GitHub Actions workflows:
+The repository has three deliberately separate GitHub Actions workflows:
 
 - [Repository validation](.github/workflows/healthgrid-validation.yml) runs on relevant pushes and pull requests. It validates exported JSON, Databricks notebook code-cell syntax, Python syntax, repository contracts, required documentation, the preserved architecture-image embed, and selected credential patterns. Its path filters include SQL, CSV, workbook, and architecture assets.
-- [Azure integration validation](.github/workflows/healthgrid-azure-integration.yml) is manually triggered and gated by a GitHub Environment. When a disposable DEV environment and GitHub OIDC configuration are available, it starts the ADF `PL_MASTER` pipeline and monitors the run to completion. ADF then invokes the configured Databricks notebook activities.
+- [Evidence contract tests](.github/workflows/healthgrid-evidence-tests.yml) exercise the sanitized ADF activity-evidence collector, including success/failure cases for the two source branches, Gold notebook executions and Gold audit-update activities.
+- [Azure integration validation](.github/workflows/healthgrid-azure-integration.yml) is manually triggered and gated by a GitHub Environment. When a disposable DEV environment and GitHub OIDC configuration are available, it starts the ADF `PL_MASTER` pipeline, collects sanitized activity-level evidence across nested pipeline runs, and fails when the two source branches, three expected Gold notebook activities or three Gold audit updates are not observed as successful.
 
-The repository-validation workflow is static by design; it does not start cloud services or incur Azure compute costs. The integration workflow is not run on every commit and remains unavailable until its Azure resources, identity federation, environment secrets, and variables are configured. A successful master run is one end-to-end signal, not a substitute for the scenario-level data reconciliation and failure-injection tests in [the validation plan](docs/VALIDATION_PLAN.md).
+The repository-validation and evidence-contract workflows do not start cloud services or incur Azure compute costs. The integration workflow is not run on every commit and remains blocked until its Azure resources, identity federation, environment secrets and variables are configured. Even when its activity-level check passes, inspect `ctrl.audit_log`, source watermarks, file-manifest states and the three Gold tables before recording final runtime acceptance. See the [restored-environment revalidation gate](docs/RESTORED_ENVIRONMENT_REVALIDATION.md) and [validation plan](docs/VALIDATION_PLAN.md).
 
 ## Running and redeploying the project
 
-The project was executed successfully end-to-end in its original Azure environment. That environment and its resource identifiers may differ from a future HealthGrid deployment.
+The project owner confirms that the original implementation was executed end to end in Azure. The original environment was later decommissioned; the latest Gold integrity and publication checks still require the restored-environment revalidation described above.
 
 A redeployment should follow this high-level sequence:
 
