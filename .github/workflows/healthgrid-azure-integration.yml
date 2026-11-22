@@ -30,6 +30,9 @@ jobs:
       ADF_PIPELINE_NAME: PL_MASTER
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Validate integration environment configuration
         shell: bash
         run: |
@@ -49,6 +52,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Execute and monitor HealthGrid end-to-end pipeline
+        id: execute_pipeline
         shell: bash
         run: |
           set -euo pipefail
@@ -85,6 +89,8 @@ jobs:
               raise RuntimeError("Azure Data Factory did not return a pipeline run ID.")
 
           print(f"Started {pipeline_name}. ADF run ID: {run_id}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"run_id={run_id}\\n")
           print("The ADF master pipeline is responsible for invoking the Databricks workloads.")
 
           deadline = time.monotonic() + (3 * 60 * 60)
@@ -149,3 +155,22 @@ jobs:
               "a cancellation was requested."
           )
           PY
+
+      - name: Collect and enforce activity-level acceptance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/collect_adf_activity_evidence.py \\
+            --resource-group "$AZURE_RESOURCE_GROUP" \\
+            --factory-name "$AZURE_DATA_FACTORY_NAME" \\
+            --run-id "${{ steps.execute_pipeline.outputs.run_id }}" \\
+            --output artifacts/healthgrid-adf-activity-evidence.json
+
+      - name: Upload sanitized ADF activity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: healthgrid-adf-evidence-${{ github.run_id }}
+          path: artifacts/healthgrid-adf-activity-evidence.json
+          if-no-files-found: warn
+          retention-days: 90
