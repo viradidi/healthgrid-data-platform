@@ -1,0 +1,42 @@
+name: HealthGrid Evidence Contract Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/collect_adf_activity_evidence.py"
+      - "tests/**"
+      - "docs/RESTORED_ENVIRONMENT_REVALIDATION.md"
+      - ".github/workflows/healthgrid-azure-integration.yml"
+      - ".github/workflows/healthgrid-evidence-tests.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/collect_adf_activity_evidence.py"
+      - "tests/**"
+      - "docs/RESTORED_ENVIRONMENT_REVALIDATION.md"
+      - ".github/workflows/healthgrid-azure-integration.yml"
+      - ".github/workflows/healthgrid-evidence-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-contract-tests:
+    name: Test sanitized ADF evidence contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile evidence collector
+        run: python -m py_compile scripts/collect_adf_activity_evidence.py
+
+      - name: Run evidence contract tests
+        run: python -m unittest discover -s tests -v
