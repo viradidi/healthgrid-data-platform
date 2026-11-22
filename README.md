@@ -208,6 +208,7 @@ The control framework includes:
 | [Data dictionary](docs/DATA_DICTIONARY.md) | Source entities, control tables, layer responsibilities, and Gold dataset grain |
 | [Operations runbook](docs/OPERATIONS_RUNBOOK.md) | Monitoring, audit interpretation, checkpoint operations, troubleshooting, and recovery |
 | [Validation plan](docs/VALIDATION_PLAN.md) | Repeatable tests, measurable acceptance criteria, and release gates |
+| [Restored-environment revalidation](docs/RESTORED_ENVIRONMENT_REVALIDATION.md) | Live Azure/Databricks acceptance gates, evidence requirements, and the current revalidation status |
 | [Deployment guide](docs/DEPLOYMENT.md) | Environment setup, secure configuration, deployment sequence, and cleanup |
 | [Artifact audit](docs/ARTIFACT_AUDIT.md) | Repository inventory, artifact coverage, security findings, and known limitations |
 | [Senior engineering readiness review](docs/SENIOR_ENGINEERING_READINESS.md) | Evidence-based assessment, capability ratings, and remaining engineering maturity gaps |
