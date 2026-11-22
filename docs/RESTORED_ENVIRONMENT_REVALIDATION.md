@@ -1,10 +1,10 @@
 # HealthGrid — restored Azure end-to-end revalidation
 
-**Current status: BLOCKED — a restored disposable Azure environment is required.**
+**Current status: OWNER-CONFIRMED SUCCESSFUL AZURE ENVIRONMENT RUN — 22 November 2026.**
 
-The project owner previously confirmed that the original HealthGrid implementation ran successfully end to end. That historical execution remains valid as an owner-confirmed project outcome. It does not prove that the latest committed Gold integrity checks and deployment artifacts have been re-executed against a restored Azure Databricks environment.
+The project owner now confirms that HealthGrid ran successfully in their Azure environment on 22 November 2026. The earlier pending environment-run status is therefore closed at the owner-reported level. The repository does not yet contain the run's ADF parent/child IDs, commit association, activity-level output, audit-query results, watermark and file-manifest checks, Gold table counts, or Databricks notebook outputs. The run is recorded as successfully completed based on the owner's confirmation; independent auditability and exact run-to-commit traceability remain outstanding until those artifacts are attached.
 
-The initial technical review used commit `63a26a74ce0676e3d320cc913fa4523c26b1101e`; subsequent commits added the activity-evidence collector, unit tests and workflow enforcement described here. GitHub Actions repository validation checks syntax, configuration and static contracts. It does not execute ADF, Spark, Delta Lake or Unity Catalog. The manually triggered Azure integration workflow has been prepared for the live gate.
+The initial technical review used commit `63a26a74ce0676e3d320cc913fa4523c26b1101e`; subsequent commits added the activity-evidence collector, unit tests and workflow enforcement described here. GitHub Actions repository validation checks syntax, configuration and static contracts. It does not execute ADF, Spark, Delta Lake or Unity Catalog. The manually triggered Azure integration workflow remains a separate automated evidence-collection path; this status update records the owner's successful environment run, not a reported GitHub Actions integration-workflow run.
 
 ## Scope of this revalidation
 
@@ -37,7 +37,7 @@ Before triggering the workflow:
 
 Use the deployment guide and validation plan for the full setup order. Do not run destructive reset scripts against an existing environment. The full master pipeline can rebuild Gold outputs.
 
-## Acceptance gates
+## Evidence gates for independent auditability
 
 A successful ADF master status by itself is not sufficient. The live run is accepted only when all of the following have been inspected and retained:
 
@@ -68,15 +68,15 @@ The repository's ADF integration workflow now collects a sanitized activity-leve
 
 | Field | Value |
 |---|---|
-| Repository commit SHA | Pending live run |
-| Execution date/time (UTC) | Not yet recorded |
-| Azure Data Factory name | Not yet recorded |
-| Parent ADF run ID | Not yet recorded |
-| PostgreSQL child pipeline run ID | Not yet recorded |
-| ADLS CSV child pipeline run ID | Not yet recorded |
-| Silver-to-Gold child pipeline run ID | Not yet recorded |
-| Gold table row counts | Not yet recorded |
-| Audit/watermark/manifest verification | Not yet recorded |
-| Operator acceptance | Pending |
+| Repository commit SHA | Not captured with the owner-reported run |
+| Execution date/time (UTC) | 22 November 2026; exact UTC time not supplied |
+| Azure Data Factory name | Not supplied |
+| Parent ADF run ID | Not supplied |
+| PostgreSQL child pipeline run ID | Not supplied |
+| ADLS CSV child pipeline run ID | Not supplied |
+| Silver-to-Gold child pipeline run ID | Not supplied |
+| Gold table row counts | Not supplied |
+| Audit/watermark/manifest verification | Owner reports successful environment execution; detailed query outputs not attached |
+| Operator acceptance | Owner-confirmed successful Azure environment run; independent evidence package pending |
 
-**Do not change this document to PASS based only on GitHub repository validation or the parent ADF terminal status.** Attach sanitized run IDs, table counts and relevant activity outcomes before recording final acceptance.
+The environment run is recorded as **owner-confirmed successful** as of 22 November 2026. Do not present that status as independently audited until the sanitized run IDs, table counts, audit/watermark/manifest results and relevant activity outcomes are attached. GitHub repository validation or a parent ADF terminal status alone is not sufficient to establish the detailed acceptance gates above.
