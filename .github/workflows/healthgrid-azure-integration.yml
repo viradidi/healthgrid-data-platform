@@ -90,7 +90,7 @@ jobs:
 
           print(f"Started {pipeline_name}. ADF run ID: {run_id}")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-              handle.write(f"run_id={run_id}\\n")
+              handle.write(f"run_id={run_id}\n")
           print("The ADF master pipeline is responsible for invoking the Databricks workloads.")
 
           deadline = time.monotonic() + (3 * 60 * 60)
@@ -160,10 +160,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/collect_adf_activity_evidence.py \\
-            --resource-group "$AZURE_RESOURCE_GROUP" \\
-            --factory-name "$AZURE_DATA_FACTORY_NAME" \\
-            --run-id "${{ steps.execute_pipeline.outputs.run_id }}" \\
+          python scripts/collect_adf_activity_evidence.py \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --factory-name "$AZURE_DATA_FACTORY_NAME" \
+            --run-id "${{ steps.execute_pipeline.outputs.run_id }}" \
             --output artifacts/healthgrid-adf-activity-evidence.json
 
       - name: Upload sanitized ADF activity evidence
