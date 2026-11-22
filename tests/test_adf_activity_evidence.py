@@ -58,35 +58,30 @@ class AdfActivityEvidenceTests(unittest.TestCase):
         self.assertNotIn("input", sanitized)
         self.assertNotIn("output", sanitized)
 
-    def test_accepts_both_source_branches_three_gold_runs_and_audits(self):
-        rows = self._accepted_fixture()
+    def _sanitize_fixture(self, rows):
+        sanitized = []
         for row in rows:
-            row["parent_pipeline_run_id"] = (
+            parent_id = (
                 "root-1" if row["activityName"].startswith("Source to Silver")
                 else "gold-child-1"
             )
+            sanitized.append(sanitize_activity(row, parent_id))
+        return sanitized
+
+    def test_accepts_both_source_branches_three_gold_runs_and_audits(self):
+        rows = self._sanitize_fixture(self._accepted_fixture())
         self.assertEqual(verify_activity_evidence(rows, "root-1"), [])
 
     def test_fails_when_a_source_branch_failed(self):
         rows = self._accepted_fixture()
         rows[0]["status"] = "Failed"
-        for row in rows:
-            row["parent_pipeline_run_id"] = (
-                "root-1" if row["activityName"].startswith("Source to Silver")
-                else "gold-child-1"
-            )
-        errors = verify_activity_evidence(rows, "root-1")
+        errors = verify_activity_evidence(self._sanitize_fixture(rows), "root-1")
         self.assertTrue(any("Source to Silver Postgres did not succeed" in e for e in errors))
 
     def test_fails_when_gold_notebooks_are_missing(self):
         rows = self._accepted_fixture()
         rows = [r for r in rows if r["activityName"] != "Silver to Gold"]
-        for row in rows:
-            row["parent_pipeline_run_id"] = (
-                "root-1" if row["activityName"].startswith("Source to Silver")
-                else "gold-child-1"
-            )
-        errors = verify_activity_evidence(rows, "root-1")
+        errors = verify_activity_evidence(self._sanitize_fixture(rows), "root-1")
         self.assertTrue(any("successful Gold notebook activities" in e for e in errors))
 
 
