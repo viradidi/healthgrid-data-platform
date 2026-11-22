@@ -4,7 +4,7 @@
 
 The project owner previously confirmed that the original HealthGrid implementation ran successfully end to end. That historical execution remains valid as an owner-confirmed project outcome. It does not prove that the latest committed Gold integrity checks and deployment artifacts have been re-executed against a restored Azure Databricks environment.
 
-The latest repository commit reviewed for this gate is `63a26a74ce0676e3d320cc913fa4523c26b1101e`. GitHub Actions repository validation checks syntax, configuration and static contracts. It does not execute ADF, Spark, Delta Lake or Unity Catalog. The manually triggered Azure integration workflow has been prepared for the live gate.
+The initial technical review used commit `63a26a74ce0676e3d320cc913fa4523c26b1101e`; subsequent commits added the activity-evidence collector, unit tests and workflow enforcement described here. GitHub Actions repository validation checks syntax, configuration and static contracts. It does not execute ADF, Spark, Delta Lake or Unity Catalog. The manually triggered Azure integration workflow has been prepared for the live gate.
 
 ## Scope of this revalidation
 
